@@ -2399,6 +2399,59 @@ body.bg-dual-accent #left #tracks li.current {
   }
 }
 
+/* ===== 歌单分页加载更多指示条与按钮样式 ===== */
+.ncm-playlist-more-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 14px;
+  margin: 10px 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  gap: 8px;
+  transition: all 0.25s ease;
+}
+
+.ncm-playlist-more-loader.loading {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.ncm-more-text {
+  font-size: 11px;
+  color: #94a3b8;
+  letter-spacing: 0.2px;
+  user-select: none;
+}
+
+.ncm-playlist-more-loader.loading .ncm-more-text {
+  color: #10b981;
+}
+
+.ncm-more-btn {
+  padding: 4px 14px;
+  font-size: 11px;
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ncm-more-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+
+.ncm-more-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 
 
 

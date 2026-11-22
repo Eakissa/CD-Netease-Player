@@ -302,13 +302,17 @@ function createTrackRow(song, position, onPlayClick) {
 // 获取歌单曲目（带内存缓存与自动分页拉取）
 async function fetchPlaylistTracks(plId, expectedCount = 0) {
   if (playlistTracksCache.has(plId)) {
-    return playlistTracksCache.get(plId);
+    const cached = playlistTracksCache.get(plId);
+    if (!expectedCount || cached.length >= expectedCount) {
+      return cached;
+    }
   }
-  const loaded = [];
+  const loaded = playlistTracksCache.get(plId) ? [...playlistTracksCache.get(plId)] : [];
   const limit = 500;
-  for (let offset = 0; ; offset += limit) {
+  for (let offset = loaded.length; ; offset += limit) {
     const result = await api("/playlist/track/all", { id: plId, limit, offset });
     const songs = result.songs || [];
+    if (!songs.length) break;
     loaded.push(...songs);
     if (expectedCount ? offset + limit >= expectedCount : songs.length < limit) break;
   }
@@ -435,7 +439,12 @@ function renderPlaylistAccordion() {
       e.stopPropagation();
       try {
         quickPlayBtn.style.opacity = "0.5";
-        const songs = await fetchPlaylistTracks(pl.id, pl.trackCount);
+        let songs = playlistTracksCache.get(pl.id);
+        if (!songs || !songs.length) {
+          const res = await api("/playlist/track/all", { id: pl.id, limit: 500, offset: 0 });
+          songs = res.songs || [];
+          playlistTracksCache.set(pl.id, songs);
+        }
         quickPlayBtn.style.opacity = "";
         if (!songs.length) {
           showPlayerToast("歌单内暂无曲目");
@@ -447,6 +456,34 @@ function renderPlaylistAccordion() {
         rebuildQueueOrder(0);
         playTrack(0);
         showPlayerToast(`已开始播放歌单: ${pl.name} (${songs.length} 首)`);
+
+        // 如果歌单总数大于已加载数量，后台静默拉取剩余曲目并实时追加到播放队列
+        const total = Number(pl.trackCount) || 0;
+        if (total > songs.length) {
+          (async () => {
+            let offset = songs.length;
+            while (offset < total) {
+              try {
+                const nextRes = await api("/playlist/track/all", { id: pl.id, limit: 500, offset });
+                const batch = nextRes.songs || [];
+                if (!batch.length) break;
+                const prevCount = songs.length;
+                songs.push(...batch);
+                playlistTracksCache.set(pl.id, songs);
+                offset += batch.length;
+                if (queueName === pl.name) {
+                  for (let idx = prevCount; idx < songs.length; idx++) {
+                    queueOrder.push(idx);
+                  }
+                  if ($("ncm-queue")?.open) renderQueue();
+                }
+                if (batch.length < 500) break;
+              } catch (err) {
+                break;
+              }
+            }
+          })();
+        }
       } catch (err) {
         quickPlayBtn.style.opacity = "";
         console.error("[NCM] 快速播放歌单失败", err);
@@ -476,24 +513,136 @@ function renderPlaylistAccordion() {
         if (!body.dataset.loaded) {
           body.innerHTML = '<div class="ncm-drawer-loading">正在加载曲目...</div>';
           try {
-            const songs = await fetchPlaylistTracks(pl.id, pl.trackCount);
+            const totalCount = Number(pl.trackCount) || 0;
+            // 首次获取前 500 首（如有缓存先用缓存）
+            let loadedSongs = playlistTracksCache.get(pl.id);
+            if (!loadedSongs || !loadedSongs.length) {
+              const res = await api("/playlist/track/all", { id: pl.id, limit: 500, offset: 0 });
+              loadedSongs = res.songs || [];
+              playlistTracksCache.set(pl.id, loadedSongs);
+            }
+
             body.dataset.loaded = "true";
             body.innerHTML = "";
+
+            if (!loadedSongs.length) {
+              body.innerHTML = '<div class="ncm-drawer-loading">歌单内暂无曲目</div>';
+              return;
+            }
+
             const ul = document.createElement("ul");
             ul.className = "ncm-track-list";
-            songs.forEach((song, sIdx) => {
-              const row = createTrackRow(song, sIdx, () => {
-                tracks = songs;
-                queueTracks = songs;
-                queueName = pl.name;
-                rebuildQueueOrder(sIdx);
-                playTrack(sIdx);
+
+            const appendSongRows = (songBatch, startIdx) => {
+              const frag = document.createDocumentFragment();
+              songBatch.forEach((song, i) => {
+                const sIdx = startIdx + i;
+                const row = createTrackRow(song, sIdx, () => {
+                  tracks = loadedSongs;
+                  queueTracks = loadedSongs;
+                  queueName = pl.name;
+                  rebuildQueueOrder(sIdx);
+                  playTrack(sIdx);
+                });
+                frag.appendChild(row);
               });
-              ul.appendChild(row);
-            });
+              ul.appendChild(frag);
+            };
+
+            appendSongRows(loadedSongs, 0);
             body.appendChild(ul);
+
+            // 如果歌单曲目总数超出当前已加载数量，启用滑到底部自动加载 + 手动点击加载下一页
+            if (totalCount > loadedSongs.length) {
+              const moreLoader = document.createElement("div");
+              moreLoader.className = "ncm-playlist-more-loader";
+
+              const moreText = document.createElement("span");
+              moreText.className = "ncm-more-text";
+              const nextBatchEnd = Math.min(loadedSongs.length + 500, totalCount);
+              moreText.textContent = `已加载 ${loadedSongs.length} / ${totalCount} 首（向下滑动自动加载）`;
+
+              const moreBtn = document.createElement("button");
+              moreBtn.type = "button";
+              moreBtn.className = "ncm-more-btn";
+              moreBtn.textContent = `加载下一批 (${loadedSongs.length + 1} ~ ${nextBatchEnd})`;
+
+              moreLoader.append(moreText, moreBtn);
+              body.appendChild(moreLoader);
+
+              let isLoadingMore = false;
+              const loadNextBatch = async () => {
+                if (isLoadingMore || loadedSongs.length >= totalCount) return;
+                isLoadingMore = true;
+                const currentOffset = loadedSongs.length;
+                const targetEnd = Math.min(currentOffset + 500, totalCount);
+
+                moreLoader.classList.add("loading");
+                moreText.textContent = `正在加载第 ${currentOffset + 1} ~ ${targetEnd} 首...`;
+                moreBtn.disabled = true;
+
+                try {
+                  const res = await api("/playlist/track/all", { id: pl.id, limit: 500, offset: currentOffset });
+                  const newSongs = res.songs || [];
+                  if (newSongs.length > 0) {
+                    const prevCount = loadedSongs.length;
+                    loadedSongs.push(...newSongs);
+                    playlistTracksCache.set(pl.id, loadedSongs);
+                    appendSongRows(newSongs, prevCount);
+
+                    // 若正在播放该歌单，同步追加到当前播放列表与播放队列
+                    if (queueName === pl.name) {
+                      tracks = loadedSongs;
+                      queueTracks = loadedSongs;
+                      for (let idx = prevCount; idx < loadedSongs.length; idx++) {
+                        queueOrder.push(idx);
+                      }
+                      if ($("ncm-queue")?.open) renderQueue();
+                    }
+                  }
+
+                  if (loadedSongs.length >= totalCount || !newSongs.length || newSongs.length < 500) {
+                    moreText.textContent = `已加载全部 ${loadedSongs.length} 首曲目`;
+                    moreBtn.hidden = true;
+                    moreLoader.classList.remove("loading");
+                  } else {
+                    const upcomingEnd = Math.min(loadedSongs.length + 500, totalCount);
+                    moreText.textContent = `已加载 ${loadedSongs.length} / ${totalCount} 首（向下滑动自动加载）`;
+                    moreBtn.textContent = `加载下一批 (${loadedSongs.length + 1} ~ ${upcomingEnd})`;
+                    moreBtn.disabled = false;
+                    moreLoader.classList.remove("loading");
+                  }
+                } catch (loadErr) {
+                  console.error("[NCM] 加载后续曲目失败", loadErr);
+                  moreText.textContent = `加载失败，点击重试 (${currentOffset + 1} ~ ${targetEnd})`;
+                  moreBtn.disabled = false;
+                  moreLoader.classList.remove("loading");
+                } finally {
+                  isLoadingMore = false;
+                }
+              };
+
+              moreBtn.onclick = (e) => {
+                e.stopPropagation();
+                loadNextBatch();
+              };
+
+              // 向下滑动触底自动触发拉取下一批（501~1000，1001~1500...）
+              body.onscroll = () => {
+                if (isLoadingMore || loadedSongs.length >= totalCount) return;
+                if (body.scrollTop + body.clientHeight >= body.scrollHeight - 100) {
+                  loadNextBatch();
+                }
+              };
+            }
           } catch (err) {
-            body.innerHTML = '<div class="ncm-drawer-loading" style="color:#fda4af">加载曲目失败</div>';
+            console.error("[NCM] 加载歌单曲目失败", err);
+            body.innerHTML = '<div class="ncm-drawer-loading" style="color:#fda4af">加载曲目失败，点击重试</div>';
+            body.onclick = () => {
+              body.onclick = null;
+              body.dataset.loaded = "";
+              header.click();
+            };
           }
         }
       }

@@ -2,10 +2,21 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const sourceDir = path.resolve('D:/0AGENT/stuff/CD-Netease-AV3A/source');
-const distBase = path.resolve('D:/0AGENT/stuff/CD-Netease-AV3A/dist');
+const sourceDir = path.resolve(__dirname, '..');
+const distBase = path.resolve(sourceDir, '../dist');
+const version = require(path.join(sourceDir, 'package.json')).version || '1.0.3';
 const stagingDir = path.join(distBase, 'staging_app');
-const distAppDir = path.join(distBase, 'CD-Netease-Player-v1.0.2-win-x64');
+const distAppDir = path.join(distBase, `CD-Netease-Player-v${version}-win-x64`);
+const templateDir = path.join(distBase, 'CD-Netease-Player-v1.0.0-win-x64');
+
+console.log(`🚀 Building CD Netease Player v${version}...`);
+
+// Ensure dist target directory exists with runtime binaries
+if (!fs.existsSync(distAppDir)) {
+  console.log(`Creating ${distAppDir} from template...`);
+  fs.cpSync(templateDir, distAppDir, { recursive: true });
+}
+
 const outputAsar = path.join(distAppDir, 'resources', 'app.asar');
 
 console.log('1. Preparing staging directory...');
@@ -16,7 +27,7 @@ fs.mkdirSync(stagingDir, { recursive: true });
 
 // Copy source files
 const entries = fs.readdirSync(sourceDir);
-const exclude = new Set(['.git', '.github', 'screenshots', 'dist', 'node_modules', 'node_modules.zip']);
+const exclude = new Set(['.git', '.github', 'screenshots', 'dist', 'node_modules', 'node_modules.zip', 'scripts']);
 const devDeps = new Set(['app-builder-bin', 'typescript', '7zip-bin', '@esbuild', 'esbuild', 'electron', 'electron-builder', '.package-lock.json', '.cache']);
 
 for (const entry of entries) {
@@ -45,11 +56,26 @@ const standaloneAsar = path.join(distBase, 'app.asar');
 fs.copyFileSync(outputAsar, standaloneAsar);
 
 const size = fs.statSync(outputAsar).size;
-console.log('✅ Packed successfully!');
+console.log('✅ app.asar built successfully!');
 console.log('📦 app.asar size:', (size / (1024 * 1024)).toFixed(2), 'MB');
 console.log('📍 Saved to:', outputAsar);
-console.log('📍 Standalone copy:', standaloneAsar);
+console.log('📍 Standalone quick update file:', standaloneAsar);
 
 console.log('4. Cleaning up staging...');
 fs.rmSync(stagingDir, { recursive: true, force: true });
-console.log('Done!');
+
+// 5. Create release zip package
+const zipPath = path.join(distBase, `CD-Netease-Player-v${version}-win-x64.zip`);
+const sevenZipPath = path.join(sourceDir, 'node_modules/7zip-bin/win/x64/7za.exe');
+
+if (fs.existsSync(sevenZipPath)) {
+  console.log('5. Creating portable release zip package...');
+  if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+  execSync(`"${sevenZipPath}" a -tzip -mx=7 "${zipPath}" "${distAppDir}/*"`, { stdio: 'inherit' });
+  const zipSize = fs.statSync(zipPath).size;
+  console.log('📦 Zip package size:', (zipSize / (1024 * 1024)).toFixed(2), 'MB');
+  console.log('📍 Zip saved to:', zipPath);
+}
+
+console.log(`\n🎉 Build complete for v${version}!`);
+
