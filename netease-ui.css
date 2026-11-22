@@ -2217,6 +2217,29 @@ body.bg-dual-accent #left #tracks li.current {
   box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
+.update-type-pill {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(99, 102, 241, 0.16);
+  border: 1px solid rgba(129, 140, 248, 0.4);
+  color: #c7d2fe;
+}
+
+.update-type-pill.patch {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(52, 211, 153, 0.45);
+  color: #6ee7b7;
+}
+
+.update-type-pill.asar {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(251, 191, 36, 0.45);
+  color: #fde68a;
+}
+
 .update-cur-text {
   font-size: 12px;
   color: #8c93a8;

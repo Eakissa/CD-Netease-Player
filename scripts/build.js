@@ -1,4 +1,4 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
@@ -19,7 +19,7 @@ if (!fs.existsSync(distAppDir)) {
 
 const outputAsar = path.join(distAppDir, 'resources', 'app.asar');
 
-console.log('1. Preparing staging directory...');
+console.log('1. Preparing staging directory for app.asar...');
 if (fs.existsSync(stagingDir)) {
   fs.rmSync(stagingDir, { recursive: true, force: true });
 }
@@ -70,7 +70,7 @@ console.log('📍 Standalone quick update file:', standaloneAsar);
 console.log('4. Cleaning up staging...');
 fs.rmSync(stagingDir, { recursive: true, force: true });
 
-// 5. Create release zip package
+// 5. Create release zip package and update packages
 const zipPath = path.join(distBase, `CD-Netease-Player-v${version}-win-x64.zip`);
 const sevenZipPath = path.join(sourceDir, 'node_modules/7zip-bin/win/x64/7za.exe');
 
@@ -82,15 +82,62 @@ if (fs.existsSync(sevenZipPath)) {
   console.log('📦 Zip package size:', (zipSize / (1024 * 1024)).toFixed(2), 'MB');
   console.log('📍 Zip saved to:', zipPath);
 
-  // 6. Create lightweight in-app update package (app-update.zip)
+  // 6. Create lightweight in-app update package (app-update.zip - Tier 2 Core)
   const updateZipPath = path.join(distBase, 'app-update.zip');
-  console.log('6. Creating ultra-lightweight in-app update package (app-update.zip)...');
+  console.log('6. Creating lightweight core update package (app-update.zip)...');
   if (fs.existsSync(updateZipPath)) fs.unlinkSync(updateZipPath);
   execSync(`"${sevenZipPath}" a -tzip -mx=9 "${updateZipPath}" "${standaloneAsar}"`, { stdio: 'inherit' });
   const updateZipSize = fs.statSync(updateZipPath).size;
   console.log('⚡ app-update.zip size:', (updateZipSize / (1024 * 1024)).toFixed(2), 'MB');
   console.log('📍 Update zip saved to:', updateZipPath);
+
+  // 7. Create ultra-lightweight micro-patch package (patch-v${version}.zip - Tier 1 Hot-Patch)
+  console.log(`7. Creating ultra-lightweight micro-patch package (patch-v${version}.zip)...`);
+  const patchStagingDir = path.join(distBase, 'temp_micro_patch');
+  if (fs.existsSync(patchStagingDir)) fs.rmSync(patchStagingDir, { recursive: true, force: true });
+  fs.mkdirSync(patchStagingDir, { recursive: true });
+
+  const patchFiles = [
+    'main.js',
+    'main-core.js',
+    'patch-manager.js',
+    'preload.js',
+    'index.html',
+    'netease-player.js',
+    'netease-ui.css',
+    'style.css',
+    'amll-player.js',
+    'audio-stream.js',
+    'av3a-decoder.js',
+    'artwork-cache.js',
+    'we-bridge.js',
+    'package.json'
+  ];
+
+  for (const f of patchFiles) {
+    const srcF = path.join(sourceDir, f);
+    if (fs.existsSync(srcF)) {
+      fs.copyFileSync(srcF, path.join(patchStagingDir, f));
+    }
+  }
+
+  const manifest = {
+    name: 'cd-netease-player-patch',
+    version: version,
+    minBaseVersion: '1.0.3',
+    files: patchFiles,
+    builtAt: Date.now()
+  };
+  fs.writeFileSync(path.join(patchStagingDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+
+  const patchZipPath = path.join(distBase, `patch-v${version}.zip`);
+  if (fs.existsSync(patchZipPath)) fs.unlinkSync(patchZipPath);
+  execSync(`"${sevenZipPath}" a -tzip -mx=9 "${patchZipPath}" "${patchStagingDir}/*"`, { stdio: 'inherit' });
+  fs.rmSync(patchStagingDir, { recursive: true, force: true });
+
+  const patchZipSize = fs.statSync(patchZipPath).size;
+  console.log('✨ Micro-patch package size:', (patchZipSize / 1024).toFixed(2), 'KB (', (patchZipSize / (1024 * 1024)).toFixed(3), 'MB )');
+  console.log('📍 Micro-patch saved to:', patchZipPath);
 }
 
 console.log(`\n🎉 Build complete for v${version}!`);
-

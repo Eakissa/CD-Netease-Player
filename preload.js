@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+﻿const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("CDCaseSettings", {
   getCacheDirectory: () => ipcRenderer.invoke("cd-cache:get"),
@@ -8,7 +8,6 @@ contextBridge.exposeInMainWorld("CDCaseSettings", {
   readArtwork: url => ipcRenderer.invoke("cd-cache:read-artwork", url),
   writeArtwork: (url, data) => ipcRenderer.invoke("cd-cache:write-artwork", url, data),
 });
-
 
 contextBridge.exposeInMainWorld("CDCaseAudio", {
   open: (url, format) => ipcRenderer.invoke("cd-audio:open", url, format),
@@ -39,6 +38,8 @@ contextBridge.exposeInMainWorld("CDCaseApp", {
     ipcRenderer.send("app:update-track", status);
   },
   checkUpdate: () => ipcRenderer.invoke("app:check-update"),
+  getPatchStatus: () => ipcRenderer.invoke("app:get-patch-status"),
+  revertPatch: () => ipcRenderer.invoke("app:revert-patch"),
   openExternal: url => ipcRenderer.invoke("app:open-external", url),
   getVersion: () => ipcRenderer.invoke("app:get-version"),
   startInAppUpdate: options => ipcRenderer.invoke("app:start-inapp-update", options),

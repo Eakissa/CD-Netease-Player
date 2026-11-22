@@ -1912,7 +1912,13 @@ async function checkAppUpdates(silent = false) {
     if (!result) throw new Error("未获取到检查结果");
 
     if (versionDisplay && result.currentVersion) {
-      versionDisplay.textContent = `当前版本：v${result.currentVersion}`;
+      if (result.isPatch) {
+        versionDisplay.textContent = `当前版本：v${result.currentVersion} (微补丁 · 基底 v${result.baseVersion})`;
+        const revertBtn = $("ncm-revert-patch-btn");
+        if (revertBtn) revertBtn.hidden = false;
+      } else {
+        versionDisplay.textContent = `当前版本：v${result.currentVersion}`;
+      }
     }
 
     if (result.success) {
@@ -1958,6 +1964,7 @@ function showUpdateModal(release) {
   const modal = $("ncm-update-modal");
   if (!modal) return;
   const newTagEl = $("ncm-update-new-tag");
+  const tierTagEl = $("ncm-update-tier-tag");
   const curTagEl = $("ncm-update-cur-tag");
   const relNameEl = $("ncm-update-release-name");
   const notesEl = $("ncm-update-notes");
@@ -1972,12 +1979,28 @@ function showUpdateModal(release) {
   if (curTagEl) curTagEl.textContent = `当前版本: v${release.currentVersion}`;
   if (relNameEl) relNameEl.textContent = release.name || release.tagName;
 
+  if (tierTagEl) {
+    if (release.updateType === "patch") {
+      tierTagEl.hidden = false;
+      tierTagEl.className = "update-type-pill patch";
+      const sizeStr = release.recommendedAsset?.size ? ` (${(release.recommendedAsset.size / 1024).toFixed(0)} KB)` : "";
+      tierTagEl.textContent = `⚡ 极速微补丁${sizeStr}`;
+    } else if (release.updateType === "asar") {
+      tierTagEl.hidden = false;
+      tierTagEl.className = "update-type-pill asar";
+      const sizeStr = release.recommendedAsset?.size ? ` (${(release.recommendedAsset.size / (1024 * 1024)).toFixed(1)} MB)` : "";
+      tierTagEl.textContent = `📦 核心框架更新${sizeStr}`;
+    } else {
+      tierTagEl.hidden = true;
+    }
+  }
+
   let notesText = release.body || "暂无详细更新说明。";
   if (release.assets && release.assets.length > 0) {
     const assetList = release.assets
-      .map(a => `• ${a.name} (${(a.size / (1024 * 1024)).toFixed(1)} MB)`)
+      .map(a => `• ${a.name} (${a.size < 1024 * 1024 ? (a.size / 1024).toFixed(0) + " KB" : (a.size / (1024 * 1024)).toFixed(1) + " MB"})`)
       .join("\n");
-    notesText += `\n\n【提供下载的安装文件】：\n${assetList}`;
+    notesText += `\n\n【提供下载的更新文件】：\n${assetList}`;
   }
   if (notesEl) notesEl.textContent = notesText;
 
@@ -1985,7 +2008,7 @@ function showUpdateModal(release) {
   if (progressSection) progressSection.hidden = true;
   if (startBtn) {
     startBtn.hidden = false;
-    startBtn.textContent = "⚡ 一键自动更新";
+    startBtn.textContent = release.updateType === "patch" ? "⚡ 立即应用极速微补丁" : "⚡ 一键自动更新";
     startBtn.disabled = false;
   }
   if (cancelBtn) cancelBtn.hidden = true;
@@ -2017,18 +2040,52 @@ function initAppUpdater() {
   const speedText = $("ncm-update-speed-text");
   const useMirrorCheckbox = $("ncm-update-use-mirror");
   const optionsBar = $("ncm-update-options-bar");
+  const revertBtn = $("ncm-revert-patch-btn");
   const appBridge = window.CDCaseApp;
 
   let isUpdating = false;
 
-  // 初始化当前版本号显示
-  if (appBridge?.getVersion) {
+  // 初始化当前版本与补丁状态显示
+  if (appBridge?.getPatchStatus) {
+    appBridge.getPatchStatus().then(status => {
+      const versionDisplay = $("ncm-version-display");
+      if (status && status.hasActivePatch) {
+        if (versionDisplay) {
+          versionDisplay.textContent = `当前版本：v${status.activeVersion} (微补丁 · 基底 v${status.baseVersion})`;
+        }
+        if (revertBtn) revertBtn.hidden = false;
+      } else if (status) {
+        if (versionDisplay) {
+          versionDisplay.textContent = `当前版本：v${status.baseVersion}`;
+        }
+        if (revertBtn) revertBtn.hidden = true;
+      }
+    }).catch(() => {});
+  } else if (appBridge?.getVersion) {
     appBridge.getVersion().then(ver => {
       const versionDisplay = $("ncm-version-display");
       if (versionDisplay && ver) {
         versionDisplay.textContent = `当前版本：v${ver}`;
       }
     }).catch(() => {});
+  }
+
+  // 恢复出厂内置版本
+  if (revertBtn) {
+    revertBtn.onclick = async () => {
+      if (!confirm("确定要清除当前微补丁，恢复至安装时的内置基底版本吗？\n软件将立即自动重启。")) return;
+      revertBtn.disabled = true;
+      revertBtn.textContent = "正在恢复...";
+      try {
+        if (appBridge?.revertPatch) {
+          await appBridge.revertPatch();
+        }
+      } catch (err) {
+        alert("恢复内置版本失败: " + (err.message || err));
+        revertBtn.disabled = false;
+        revertBtn.textContent = "恢复内置版本";
+      }
+    };
   }
 
   if (checkBtn) {
@@ -2099,7 +2156,9 @@ function initAppUpdater() {
 
       if (data.state === "ready" || data.percent >= 100) {
         isUpdating = false;
-        if (statusText) statusText.textContent = "🎉 更新核心组件已就绪！";
+        if (statusText) {
+          statusText.textContent = data.message || (data.isPatch ? "🎉 极速微补丁已部署就绪！" : "🎉 核心更新组件已就绪！");
+        }
         if (startBtn) startBtn.hidden = true;
         if (cancelBtn) cancelBtn.hidden = true;
         if (restartBtn) restartBtn.hidden = false;
@@ -2134,6 +2193,7 @@ function initAppUpdater() {
           tagName: latestReleaseInfo.tagName,
           assets: latestReleaseInfo.assets || [],
           htmlUrl: latestReleaseInfo.htmlUrl,
+          updateType: latestReleaseInfo.updateType,
           useMirror,
         });
 
