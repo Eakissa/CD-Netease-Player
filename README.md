@@ -18,6 +18,18 @@
 
 ---
 
+## 🖼️ 界面预览 (Screenshots)
+
+<div align="center">
+  <p><strong>💿 经典 3D CD 盒模式</strong>（双特征色自适应流光背景 · 拟物亚克力盒与实时频谱）</p>
+  <img src="screenshots/preview-cd-mode.jpg" alt="CD Netease Player 3D 模式预览" width="88%" style="border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);" />
+  <br><br>
+  <p><strong>🎤 沉浸式歌词聚焦模式</strong>（AMLL 逐字流光歌词 · 专辑海报与平滑进度控制）</p>
+  <img src="screenshots/preview-focus-mode.jpg" alt="CD Netease Player 歌词聚焦模式预览" width="88%" style="border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);" />
+</div>
+
+---
+
 ## ✨ 核心特性
 
 - 💿 **3D 拟物亚克力 CD 盒交互**：
