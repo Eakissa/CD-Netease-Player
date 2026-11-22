@@ -1812,6 +1812,12 @@ function showUpdateModal(release) {
   const curTagEl = $("ncm-update-cur-tag");
   const relNameEl = $("ncm-update-release-name");
   const notesEl = $("ncm-update-notes");
+  const progressSection = $("ncm-update-progress-section");
+  const startBtn = $("ncm-update-start-btn");
+  const cancelBtn = $("ncm-update-cancel-btn");
+  const restartBtn = $("ncm-update-restart-btn");
+  const modalIgnore = $("ncm-update-ignore-btn");
+  const optionsBar = $("ncm-update-options-bar");
 
   if (newTagEl) newTagEl.textContent = release.tagName || `v${release.latestVersion}`;
   if (curTagEl) curTagEl.textContent = `当前版本: v${release.currentVersion}`;
@@ -1826,6 +1832,21 @@ function showUpdateModal(release) {
   }
   if (notesEl) notesEl.textContent = notesText;
 
+  // 重置下载进度状态与按钮交互
+  if (progressSection) progressSection.hidden = true;
+  if (startBtn) {
+    startBtn.hidden = false;
+    startBtn.textContent = "⚡ 一键自动更新";
+    startBtn.disabled = false;
+  }
+  if (cancelBtn) cancelBtn.hidden = true;
+  if (restartBtn) restartBtn.hidden = true;
+  if (modalIgnore) {
+    modalIgnore.disabled = false;
+    modalIgnore.textContent = "稍后提醒";
+  }
+  if (optionsBar) optionsBar.style.display = "";
+
   if (!modal.open) modal.showModal();
 }
 
@@ -1835,8 +1856,21 @@ function initAppUpdater() {
   const modal = $("ncm-update-modal");
   const modalClose = $("ncm-update-modal-close");
   const modalIgnore = $("ncm-update-ignore-btn");
-  const modalConfirm = $("ncm-update-confirm-btn");
+  const startBtn = $("ncm-update-start-btn");
+  const cancelBtn = $("ncm-update-cancel-btn");
+  const restartBtn = $("ncm-update-restart-btn");
+  const browserBtn = $("ncm-update-browser-btn");
+  const progressSection = $("ncm-update-progress-section");
+  const statusText = $("ncm-update-status-text");
+  const percentText = $("ncm-update-percent-text");
+  const progressBar = $("ncm-update-progress-bar");
+  const bytesText = $("ncm-update-bytes-text");
+  const speedText = $("ncm-update-speed-text");
+  const useMirrorCheckbox = $("ncm-update-use-mirror");
+  const optionsBar = $("ncm-update-options-bar");
   const appBridge = window.CDCaseApp;
+
+  let isUpdating = false;
 
   // 初始化当前版本号显示
   if (appBridge?.getVersion) {
@@ -1859,19 +1893,164 @@ function initAppUpdater() {
     } else {
       window.open(url, "_blank");
     }
-    modal?.close();
   };
 
-  if (openReleaseBtn) openReleaseBtn.onclick = openReleasePage;
-  if (modalConfirm) modalConfirm.onclick = openReleasePage;
+  // 设置面板里的“前往更新”按钮直接调出更新弹窗
+  if (openReleaseBtn) {
+    openReleaseBtn.onclick = () => {
+      if (latestReleaseInfo) {
+        showUpdateModal(latestReleaseInfo);
+      } else {
+        checkAppUpdates(false);
+      }
+    };
+  }
 
-  if (modalClose) modalClose.onclick = () => modal?.close();
+  if (browserBtn) browserBtn.onclick = openReleasePage;
+
+  if (modalClose) {
+    modalClose.onclick = () => {
+      if (isUpdating) {
+        if (!confirm("更新正在下载中，确定要关闭弹窗吗？")) return;
+        if (appBridge?.cancelInAppUpdate) appBridge.cancelInAppUpdate();
+        isUpdating = false;
+      }
+      modal?.close();
+    };
+  }
+
   if (modalIgnore) {
     modalIgnore.onclick = () => {
       if (latestReleaseInfo?.tagName) {
         sessionStorage.setItem("ncm_update_ignored_tag", latestReleaseInfo.tagName);
       }
       modal?.close();
+    };
+  }
+
+  // 监听主进程发回的下载进度
+  if (appBridge?.onUpdateProgress) {
+    appBridge.onUpdateProgress((data) => {
+      if (!data) return;
+      if (data.percent !== undefined) {
+        if (progressBar) progressBar.style.width = `${data.percent}%`;
+        if (percentText) percentText.textContent = `${data.percent}%`;
+      }
+      if (data.message && statusText) {
+        statusText.textContent = data.message;
+      } else if (data.state === "downloading" && statusText) {
+        statusText.textContent = "正在下载更新组件...";
+      }
+      if (bytesText && data.downloadedFormatted) {
+        bytesText.textContent = `${data.downloadedFormatted} / ${data.totalFormatted || "未知大小"}`;
+      }
+      if (speedText && data.speedFormatted) {
+        speedText.textContent = `速度: ${data.speedFormatted}`;
+      }
+
+      if (data.state === "ready" || data.percent >= 100) {
+        isUpdating = false;
+        if (statusText) statusText.textContent = "🎉 更新核心组件已就绪！";
+        if (startBtn) startBtn.hidden = true;
+        if (cancelBtn) cancelBtn.hidden = true;
+        if (restartBtn) restartBtn.hidden = false;
+      }
+    });
+  }
+
+  // 点击“一键自动更新”
+  if (startBtn) {
+    startBtn.onclick = async () => {
+      if (!latestReleaseInfo) return;
+      isUpdating = true;
+
+      // 切换 UI 到下载状态
+      if (progressSection) progressSection.hidden = false;
+      if (optionsBar) optionsBar.style.display = "none";
+      if (progressBar) progressBar.style.width = "0%";
+      if (percentText) percentText.textContent = "0%";
+      if (statusText) statusText.textContent = "正在初始化更新通道...";
+      if (bytesText) bytesText.textContent = "准备中...";
+      if (speedText) speedText.textContent = "";
+
+      startBtn.hidden = true;
+      if (cancelBtn) cancelBtn.hidden = false;
+      if (restartBtn) restartBtn.hidden = true;
+      if (modalIgnore) modalIgnore.disabled = true;
+
+      const useMirror = useMirrorCheckbox ? useMirrorCheckbox.checked : true;
+
+      try {
+        const result = await appBridge.startInAppUpdate({
+          tagName: latestReleaseInfo.tagName,
+          assets: latestReleaseInfo.assets || [],
+          htmlUrl: latestReleaseInfo.htmlUrl,
+          useMirror,
+        });
+
+        if (result && result.success) {
+          isUpdating = false;
+          if (statusText) statusText.textContent = "✅ 更新已就绪，点击立即重启生效！";
+          if (cancelBtn) cancelBtn.hidden = true;
+          if (restartBtn) restartBtn.hidden = false;
+          if (modalIgnore) {
+            modalIgnore.disabled = false;
+            modalIgnore.textContent = "稍后手动重启";
+          }
+        } else {
+          isUpdating = false;
+          if (statusText) statusText.textContent = `❌ 更新失败：${result?.message || "未知错误"}`;
+          if (startBtn) {
+            startBtn.hidden = false;
+            startBtn.textContent = "重新尝试更新";
+          }
+          if (cancelBtn) cancelBtn.hidden = true;
+          if (modalIgnore) modalIgnore.disabled = false;
+        }
+      } catch (err) {
+        isUpdating = false;
+        if (statusText) statusText.textContent = `❌ 更新发生异常：${err.message || err}`;
+        if (startBtn) {
+          startBtn.hidden = false;
+          startBtn.textContent = "重新尝试更新";
+        }
+        if (cancelBtn) cancelBtn.hidden = true;
+        if (modalIgnore) modalIgnore.disabled = false;
+      }
+    };
+  }
+
+  // 点击“取消下载”
+  if (cancelBtn) {
+    cancelBtn.onclick = async () => {
+      if (appBridge?.cancelInAppUpdate) {
+        await appBridge.cancelInAppUpdate();
+      }
+      isUpdating = false;
+      if (statusText) statusText.textContent = "已取消下载";
+      if (startBtn) {
+        startBtn.hidden = false;
+        startBtn.textContent = "⚡ 一键自动更新";
+      }
+      cancelBtn.hidden = true;
+      if (modalIgnore) modalIgnore.disabled = false;
+      if (optionsBar) optionsBar.style.display = "";
+    };
+  }
+
+  // 点击“立即重启生效”
+  if (restartBtn) {
+    restartBtn.onclick = async () => {
+      restartBtn.disabled = true;
+      restartBtn.textContent = "正在重启...";
+      if (statusText) statusText.textContent = "正在重启应用以应用新版本...";
+      try {
+        await appBridge.applyUpdateAndRestart();
+      } catch (err) {
+        alert("重启应用失败: " + (err.message || err));
+        restartBtn.disabled = false;
+        restartBtn.textContent = "🚀 立即重启生效";
+      }
     };
   }
 

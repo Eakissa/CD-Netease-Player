@@ -381,9 +381,36 @@
         <h4 id="ncm-update-release-name">更新内容</h4>
         <div id="ncm-update-notes" class="update-notes-scroll"></div>
       </div>
+
+      <!-- 应用内更新下载进度区域 -->
+      <div id="ncm-update-progress-section" class="update-progress-section" hidden>
+        <div class="update-progress-header">
+          <span id="ncm-update-status-text" class="update-status-text">准备下载...</span>
+          <span id="ncm-update-percent-text" class="update-percent-text">0%</span>
+        </div>
+        <div class="update-progress-track">
+          <div id="ncm-update-progress-bar" class="update-progress-fill" style="width: 0%;"></div>
+        </div>
+        <div class="update-progress-meta">
+          <span id="ncm-update-bytes-text">0 MB / 0 MB</span>
+          <span id="ncm-update-speed-text">0 KB/s</span>
+        </div>
+      </div>
+
+      <!-- 加速镜像选项 -->
+      <div class="update-options-bar" id="ncm-update-options-bar">
+        <label class="update-mirror-checkbox">
+          <input type="checkbox" id="ncm-update-use-mirror" checked>
+          <span>启用 GitHub 国内网络加速镜像 (推荐开启)</span>
+        </label>
+      </div>
+
       <div class="update-modal-footer">
         <button type="button" id="ncm-update-ignore-btn" class="ncm-btn">稍后提醒</button>
-        <button type="button" id="ncm-update-confirm-btn" class="ncm-btn ncm-btn-primary">前往发布页下载</button>
+        <button type="button" id="ncm-update-browser-btn" class="ncm-btn ncm-btn-ghost" title="在默认浏览器中打开 Release 发布页">网页下载全量包</button>
+        <button type="button" id="ncm-update-start-btn" class="ncm-btn ncm-btn-primary">⚡ 一键自动更新</button>
+        <button type="button" id="ncm-update-cancel-btn" class="ncm-btn ncm-btn-danger" hidden>取消下载</button>
+        <button type="button" id="ncm-update-restart-btn" class="ncm-btn ncm-btn-primary ncm-btn-pulse" hidden>🚀 立即重启生效</button>
       </div>
     </div>
   </dialog>

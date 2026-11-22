@@ -41,4 +41,12 @@ contextBridge.exposeInMainWorld("CDCaseApp", {
   checkUpdate: () => ipcRenderer.invoke("app:check-update"),
   openExternal: url => ipcRenderer.invoke("app:open-external", url),
   getVersion: () => ipcRenderer.invoke("app:get-version"),
+  startInAppUpdate: options => ipcRenderer.invoke("app:start-inapp-update", options),
+  cancelInAppUpdate: () => ipcRenderer.invoke("app:cancel-inapp-update"),
+  applyUpdateAndRestart: () => ipcRenderer.invoke("app:apply-update-and-restart"),
+  onUpdateProgress: callback => {
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on("app:update-progress", handler);
+    return () => ipcRenderer.removeListener("app:update-progress", handler);
+  },
 });

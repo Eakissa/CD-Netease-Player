@@ -2286,6 +2286,119 @@ body.bg-dual-accent #left #tracks li.current {
   background: #f05a4f;
 }
 
+/* ===== 应用内更新进度条与按钮样式 ===== */
+.update-progress-section {
+  margin: 14px 0 16px;
+  padding: 12px 14px;
+  background: rgba(18, 20, 27, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.update-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.update-status-text {
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.update-percent-text {
+  color: #10b981;
+  font-weight: 700;
+  font-family: monospace, sans-serif;
+}
+
+.update-progress-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.update-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #06b6d4);
+  border-radius: 4px;
+  transition: width 0.25s ease-out;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+.update-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 6px;
+}
+
+.update-options-bar {
+  margin-bottom: 14px;
+}
+
+.update-mirror-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+  cursor: pointer;
+  user-select: none;
+}
+
+.update-mirror-checkbox input {
+  accent-color: #10b981;
+  cursor: pointer;
+}
+
+.update-modal-footer .ncm-btn-ghost {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94a3b8;
+}
+
+.update-modal-footer .ncm-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+}
+
+.update-modal-footer .ncm-btn-danger {
+  background: #dc2626;
+  border-color: #ef4444;
+  color: #fff;
+}
+
+.update-modal-footer .ncm-btn-danger:hover {
+  background: #b91c1c;
+}
+
+.update-modal-footer .ncm-btn-pulse {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-color: #34d399;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+  animation: update-pulse-glow 1.8s infinite;
+}
+
+@keyframes update-pulse-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
 
 
 

@@ -4,6 +4,9 @@
 
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, globalShortcut, dialog, shell } = require("electron");
 const path = require("path");
+const fs = require("fs");
+const os = require("os");
+const { spawn, execSync } = require("child_process");
 const http = require("http");
 const https = require("https");
 const { installArtworkCache } = require("./artwork-cache");
@@ -84,6 +87,163 @@ function checkGitHubRelease() {
       resolve({ success: false, currentVersion: currentAppVersion, message: "检查更新请求超时" });
     });
     req.end();
+  });
+}
+
+let currentUpdateDownload = null;
+
+function formatBytes(bytes) {
+  if (!bytes || isNaN(bytes)) return "0 MB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+function formatSpeed(bytesPerSec) {
+  if (!bytesPerSec || bytesPerSec <= 0) return "0 KB/s";
+  if (bytesPerSec >= 1024 * 1024) {
+    return (bytesPerSec / (1024 * 1024)).toFixed(1) + " MB/s";
+  }
+  return Math.round(bytesPerSec / 1024) + " KB/s";
+}
+
+function downloadFileWithProgress(url, destPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    let aborted = false;
+    let req = null;
+    let fileStream = null;
+
+    currentUpdateDownload = {
+      abort: () => {
+        aborted = true;
+        try { if (req) req.destroy(); } catch (e) {}
+        try {
+          if (fileStream) fileStream.close();
+          if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+        } catch (e) {}
+        currentUpdateDownload = null;
+        reject(new Error("用户已取消下载"));
+      }
+    };
+
+    function startRequest(targetUrl, redirectCount = 0) {
+      if (aborted) return;
+      if (redirectCount > 10) {
+        currentUpdateDownload = null;
+        return reject(new Error("下载地址重定向次数过多"));
+      }
+
+      const client = targetUrl.startsWith("https:") ? https : http;
+      let parsedUrl;
+      try {
+        parsedUrl = new URL(targetUrl);
+      } catch (err) {
+        currentUpdateDownload = null;
+        return reject(new Error("无效的下载地址: " + targetUrl));
+      }
+
+      const options = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || (targetUrl.startsWith("https:") ? 443 : 80),
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: "GET",
+        headers: {
+          "User-Agent": "CD-Netease-Player-Desktop-Updater",
+          "Accept": "*/*",
+        },
+        timeout: 30000,
+      };
+
+      req = client.request(options, (res) => {
+        if (aborted) return;
+
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          let nextUrl = res.headers.location;
+          if (!nextUrl.startsWith("http://") && !nextUrl.startsWith("https://")) {
+            nextUrl = new URL(nextUrl, targetUrl).href;
+          }
+          res.resume();
+          return startRequest(nextUrl, redirectCount + 1);
+        }
+
+        if (res.statusCode !== 200) {
+          res.resume();
+          currentUpdateDownload = null;
+          return reject(new Error(`下载服务器响应异常 (HTTP ${res.statusCode})`));
+        }
+
+        const totalBytes = parseInt(res.headers["content-length"] || "0", 10);
+        let downloadedBytes = 0;
+        let lastTime = Date.now();
+        let lastDownloaded = 0;
+        let speed = 0;
+
+        fileStream = fs.createWriteStream(destPath);
+
+        res.on("data", (chunk) => {
+          if (aborted) return;
+          downloadedBytes += chunk.length;
+
+          const now = Date.now();
+          if (now - lastTime >= 350) {
+            speed = (downloadedBytes - lastDownloaded) / ((now - lastTime) / 1000);
+            lastTime = now;
+            lastDownloaded = downloadedBytes;
+
+            const percent = totalBytes > 0 ? Math.min(99, Math.round((downloadedBytes / totalBytes) * 100)) : 0;
+            onProgress({
+              state: "downloading",
+              percent,
+              downloaded: downloadedBytes,
+              total: totalBytes,
+              speed,
+              speedFormatted: formatSpeed(speed),
+              downloadedFormatted: formatBytes(downloadedBytes),
+              totalFormatted: formatBytes(totalBytes),
+            });
+          }
+        });
+
+        res.pipe(fileStream);
+
+        fileStream.on("finish", () => {
+          fileStream.close(() => {
+            currentUpdateDownload = null;
+            if (aborted) return;
+            onProgress({
+              state: "verifying",
+              percent: 100,
+              downloaded: downloadedBytes,
+              total: downloadedBytes,
+              speed: 0,
+              speedFormatted: "0 KB/s",
+              downloadedFormatted: formatBytes(downloadedBytes),
+              totalFormatted: formatBytes(downloadedBytes),
+            });
+            resolve(destPath);
+          });
+        });
+
+        fileStream.on("error", (err) => {
+          currentUpdateDownload = null;
+          try { if (fs.existsSync(destPath)) fs.unlinkSync(destPath); } catch (e) {}
+          reject(err);
+        });
+      });
+
+      req.on("error", (err) => {
+        currentUpdateDownload = null;
+        if (!aborted) reject(err);
+      });
+
+      req.on("timeout", () => {
+        req.destroy();
+        currentUpdateDownload = null;
+        if (!aborted) reject(new Error("下载连接超时，请尝试开启国内加速镜像重试"));
+      });
+
+      req.end();
+    }
+
+    startRequest(url, 0);
   });
 }
 
@@ -425,6 +585,232 @@ app.whenReady().then(async () => {
 
   ipcMain.handle("app:get-version", () => {
     return currentAppVersion;
+  });
+
+  ipcMain.handle("app:start-inapp-update", async (_, options = {}) => {
+    try {
+      const { assets = [], useMirror = true } = options;
+      if (!assets || assets.length === 0) {
+        throw new Error("此版本发布中未包含可用的更新文件");
+      }
+
+      // 智能选取最合适的更新包：
+      // 1. 优先找 app.asar (约 76MB，速度最快且无需解压)
+      // 2. 其次找 Windows 相关的 zip 全量包 (约 130MB，下载后自动提取 resources/app.asar)
+      let targetAsset = assets.find(a => {
+        const n = (a.name || "").toLowerCase();
+        return n === "app.asar" || n.endsWith(".asar");
+      });
+
+      let isZip = false;
+      if (!targetAsset) {
+        targetAsset = assets.find(a => {
+          const n = (a.name || "").toLowerCase();
+          return n.endsWith(".zip") && (n.includes("win") || n.includes("netease"));
+        });
+        if (targetAsset) isZip = true;
+      }
+
+      if (!targetAsset) {
+        targetAsset = assets.find(a => (a.name || "").toLowerCase().endsWith(".zip"));
+        if (targetAsset) isZip = true;
+      }
+
+      if (!targetAsset || !targetAsset.downloadUrl) {
+        throw new Error("未找到适配 Windows 的更新包");
+      }
+
+      const updateDir = path.join(app.getPath("userData"), "update");
+      if (!fs.existsSync(updateDir)) {
+        fs.mkdirSync(updateDir, { recursive: true });
+      }
+
+      const stagedAsarPath = path.join(updateDir, "new_app.asar");
+      const tempDownloadPath = path.join(updateDir, isZip ? "update.zip" : "download.asar.tmp");
+
+      try {
+        if (fs.existsSync(stagedAsarPath)) fs.unlinkSync(stagedAsarPath);
+        if (fs.existsSync(tempDownloadPath)) fs.unlinkSync(tempDownloadPath);
+      } catch (e) {}
+
+      let downloadUrl = targetAsset.downloadUrl;
+      if (useMirror) {
+        downloadUrl = `https://ghproxy.net/${targetAsset.downloadUrl}`;
+      }
+
+      const sendProgress = (p) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("app:update-progress", p);
+        }
+      };
+
+      sendProgress({
+        state: "connecting",
+        percent: 0,
+        assetName: targetAsset.name,
+        totalFormatted: formatBytes(targetAsset.size),
+        message: "正在连接下载节点...",
+      });
+
+      try {
+        await downloadFileWithProgress(downloadUrl, tempDownloadPath, sendProgress);
+      } catch (downloadErr) {
+        if (useMirror) {
+          sendProgress({
+            state: "connecting",
+            percent: 0,
+            assetName: targetAsset.name,
+            totalFormatted: formatBytes(targetAsset.size),
+            message: "加速节点连接超时，尝试切换为直连下载...",
+          });
+          await downloadFileWithProgress(targetAsset.downloadUrl, tempDownloadPath, sendProgress);
+        } else {
+          throw downloadErr;
+        }
+      }
+
+      if (isZip) {
+        sendProgress({
+          state: "extracting",
+          percent: 99,
+          message: "正在从更新包解压核心文件...",
+        });
+
+        let extracted = false;
+        try {
+          execSync(`tar -xf "${tempDownloadPath}" -C "${updateDir}" resources/app.asar`, { timeout: 30000 });
+          const extractedAsar = path.join(updateDir, "resources", "app.asar");
+          if (fs.existsSync(extractedAsar)) {
+            if (fs.existsSync(stagedAsarPath)) fs.unlinkSync(stagedAsarPath);
+            fs.renameSync(extractedAsar, stagedAsarPath);
+            extracted = true;
+          }
+        } catch (tarErr) {
+          try {
+            const psCmd = `powershell -NoProfile -Command "Expand-Archive -LiteralPath '${tempDownloadPath}' -DestinationPath '${path.join(updateDir, 'extracted')}' -Force"`;
+            execSync(psCmd, { timeout: 60000 });
+            const psAsar = path.join(updateDir, "extracted", "resources", "app.asar");
+            if (fs.existsSync(psAsar)) {
+              if (fs.existsSync(stagedAsarPath)) fs.unlinkSync(stagedAsarPath);
+              fs.renameSync(psAsar, stagedAsarPath);
+              extracted = true;
+            }
+          } catch (psErr) {}
+        }
+
+        try { fs.unlinkSync(tempDownloadPath); } catch (e) {}
+
+        if (!extracted || !fs.existsSync(stagedAsarPath)) {
+          throw new Error("更新包解压失败，未找到有效的核心文件");
+        }
+      } else {
+        fs.renameSync(tempDownloadPath, stagedAsarPath);
+      }
+
+      const stats = fs.statSync(stagedAsarPath);
+      if (stats.size < 1024 * 1024) {
+        throw new Error("下载的核心更新文件损坏或大小异常");
+      }
+
+      sendProgress({
+        state: "ready",
+        percent: 100,
+        message: "更新准备就绪，点击立即重启即可生效！",
+      });
+
+      return { success: true, stagedAsar: stagedAsarPath };
+    } catch (err) {
+      return { success: false, message: err.message || "更新下载失败" };
+    }
+  });
+
+  ipcMain.handle("app:cancel-inapp-update", async () => {
+    if (currentUpdateDownload) {
+      currentUpdateDownload.abort();
+      currentUpdateDownload = null;
+    }
+    return { success: true };
+  });
+
+  ipcMain.handle("app:apply-update-and-restart", async () => {
+    try {
+      const updateDir = path.join(app.getPath("userData"), "update");
+      const stagedAsarPath = path.join(updateDir, "new_app.asar");
+
+      if (!fs.existsSync(stagedAsarPath)) {
+        throw new Error("未找到已就绪的更新文件，请先下载更新");
+      }
+
+      if (!app.isPackaged) {
+        dialog.showMessageBoxSync(mainWindow, {
+          type: "info",
+          title: "开发环境提示",
+          message: "当前运行在源码开发环境中 (非打包 exe 客户端)",
+          detail: `更新核心文件已成功下载至：\n${stagedAsarPath}\n\n在独立运行的打包客户端中，此操作会自动替换 resources/app.asar 并秒级重启。`,
+          buttons: ["知道了"],
+        });
+        return { success: true, isDev: true };
+      }
+
+      const targetAsarPath = path.join(process.resourcesPath, "app.asar");
+      const exePath = process.execPath;
+      const batPath = path.join(updateDir, "updater.bat");
+
+      const batContent = `@echo off
+chcp 65001 >nul
+title CD Netease Player 正在自动更新...
+
+set OLD_PID=%1
+set TARGET_ASAR=%~2
+set NEW_ASAR=%~3
+set EXE_PATH=%~4
+
+:wait_process
+timeout /t 1 /nobreak >nul
+tasklist /fi "PID eq %OLD_PID%" 2>nul | findstr /i "%OLD_PID%" >nul
+if "%ERRORLEVEL%"=="0" goto wait_process
+
+timeout /t 1 /nobreak >nul
+
+set RETRY=0
+:copy_loop
+copy /y "%NEW_ASAR%" "%TARGET_ASAR%" >nul 2>&1
+if "%ERRORLEVEL%"=="0" goto copy_ok
+
+set /a RETRY+=1
+if %RETRY% GEQ 10 goto copy_fail
+timeout /t 1 /nobreak >nul
+goto copy_loop
+
+:copy_ok
+del /f /q "%NEW_ASAR%" >nul 2>&1
+start "" "%EXE_PATH%"
+(goto) 2>nul & del "%~f0"
+exit /b 0
+
+:copy_fail
+echo 自动替换更新文件失败，稍后将重新启动旧版本...
+timeout /t 2 /nobreak >nul
+start "" "%EXE_PATH%"
+(goto) 2>nul & del "%~f0"
+exit /b 1
+`;
+
+      fs.writeFileSync(batPath, batContent, "utf8");
+
+      const child = spawn("cmd.exe", ["/c", batPath, process.pid.toString(), targetAsarPath, stagedAsarPath, exePath], {
+        detached: true,
+        stdio: "ignore",
+      });
+      child.unref();
+
+      isQuitting = true;
+      app.exit(0);
+
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message || "应用更新失败" };
+    }
   });
 
   app.on("activate", () => {
