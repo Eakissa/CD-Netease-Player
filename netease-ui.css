@@ -1147,96 +1147,143 @@ body:not(.lyrics-focus-mode) #amll-container * {
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
 }
 
-/* ===== 右侧磨砂玻璃质感渐变透明图层（歌词右侧边缘空隙，拉出歌单手势区） ===== */
+/* ===== 左右两侧磨砂玻璃边缘拖拉栏（左侧切换聚焦模式，右侧拉出歌单） ===== */
+#ncm-left-glass-strip,
+#ncm-left-edge-strip,
 #ncm-right-glass-strip {
   position: fixed;
-  right: 0;
   top: 0;
   bottom: 0;
   width: max(4.5vw, 48px);
   z-index: 25;
   pointer-events: auto;
   cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  /* 无互动状态下自动隐藏：默认完全透明 (opacity: 0)，感应区域常驻 */
+  opacity: 0;
+  visibility: visible;
+  transition: opacity 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+              width 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+              background 0.3s ease,
+              left 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
+              transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* 左侧拖拉栏：靠左侧放置，渐变向右淡出 */
+#ncm-left-glass-strip,
+#ncm-left-edge-strip {
+  left: 0;
+  right: auto;
   background: linear-gradient(
-    to left,
-    rgba(255, 255, 255, 0.12) 0%,
-    rgba(255, 255, 255, 0.05) 45%,
+    to right,
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(255, 255, 255, 0.06) 45%,
     rgba(255, 255, 255, 0.01) 80%,
     transparent 100%
   );
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
-  mask-image: linear-gradient(to left, black 35%, rgba(0, 0, 0, 0.6) 75%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to left, black 35%, rgba(0, 0, 0, 0.6) 75%, transparent 100%);
-  transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
-              background 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
-              opacity 0.25s ease,
-              visibility 0.25s ease;
-  user-select: none;
-  -webkit-user-select: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: none;
 }
 
-#ncm-right-glass-strip:hover {
-  width: max(5.2vw, 56px);
+/* 右侧拖拉栏：靠右侧放置，形式与左侧完全对称统一，渐变向左淡出 */
+#ncm-right-glass-strip {
+  right: 0;
+  left: auto;
   background: linear-gradient(
     to left,
-    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(255, 255, 255, 0.06) 45%,
+    rgba(255, 255, 255, 0.01) 80%,
+    transparent 100%
+  );
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: none;
+}
+
+/* 居中呼吸感小胶囊拉手 */
+#ncm-left-glass-strip::before,
+#ncm-left-edge-strip::before,
+#ncm-right-glass-strip::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 48px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+  opacity: 0.7;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+
+#ncm-left-glass-strip::before,
+#ncm-left-edge-strip::before {
+  left: 10px;
+  right: auto;
+}
+
+#ncm-right-glass-strip::before {
+  right: 10px;
+  left: auto;
+}
+
+/* 互动时显现：鼠标悬浮 (hover) 或按下拖拽 (active / interacting) */
+#ncm-left-glass-strip:hover:not(.strip-idle),
+#ncm-left-edge-strip:hover:not(.strip-idle),
+#ncm-right-glass-strip:hover:not(.strip-idle),
+#ncm-left-glass-strip:active,
+#ncm-right-glass-strip:active,
+#ncm-left-glass-strip.interacting,
+#ncm-right-glass-strip.interacting {
+  opacity: 1;
+  width: max(5.2vw, 56px);
+}
+
+#ncm-left-glass-strip:hover:not(.strip-idle) {
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.2) 0%,
     rgba(255, 255, 255, 0.08) 50%,
     rgba(255, 255, 255, 0.02) 85%,
     transparent 100%
   );
 }
 
+#ncm-right-glass-strip:hover:not(.strip-idle) {
+  background: linear-gradient(
+    to left,
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.02) 85%,
+    transparent 100%
+  );
+}
+
+#ncm-left-glass-strip:active,
 #ncm-right-glass-strip:active {
   cursor: grabbing;
 }
 
-/* 玻璃条居中呼吸感拉手小胶囊 */
-#ncm-right-glass-strip::before {
-  content: "";
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 48px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.18);
-  opacity: 0.65;
-  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
-  pointer-events: none;
-}
-
-#ncm-right-glass-strip:hover::before {
+#ncm-left-glass-strip:hover:not(.strip-idle)::before,
+#ncm-left-edge-strip:hover:not(.strip-idle)::before,
+#ncm-right-glass-strip:hover:not(.strip-idle)::before {
   opacity: 1;
   height: 68px;
   width: 4.5px;
-  background: rgba(255, 255, 255, 0.6);
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
 }
 
-/* 聚焦模式下的右侧磨砂玻璃条（延续至最底部） */
-body.lyrics-focus-mode #ncm-right-glass-strip {
-  top: 0;
-  bottom: 0;
-  width: max(5vw, 54px);
-  background: linear-gradient(
-    to left,
-    rgba(255, 255, 255, 0.14) 0%,
-    rgba(255, 255, 255, 0.06) 45%,
-    rgba(255, 255, 255, 0.01) 85%,
-    transparent 100%
-  );
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-/* 歌单抽屉打开时隐藏磨砂玻璃条 */
+/* 歌单抽屉已打开时，隐藏右侧拖拉栏，避免遮挡 */
 body.ncm-drawer-open #ncm-right-glass-strip {
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
 }
 
 /* ===== 画面全新视听布局 ===== */
@@ -1402,125 +1449,30 @@ body.lyrics-focus-mode .amll-focus-artwork-wrap:hover {
   transform: none;
 }
 
-/* ===== 模式切换滑块（未聚焦模式位于屏幕最左侧，聚焦模式联动滑移至封面右侧） ===== */
-#ncm-left-glass-strip,
-#ncm-left-edge-strip {
-  position: fixed;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: max(4.5vw, 48px);
-  z-index: 25;
-  pointer-events: auto;
-  cursor: grab;
-  background: linear-gradient(
-    to right,
-    rgba(255, 255, 255, 0.12) 0%,
-    rgba(255, 255, 255, 0.05) 45%,
-    rgba(255, 255, 255, 0.01) 80%,
-    transparent 100%
-  );
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  transition: left 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
-              width 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
-              background 0.3s ease,
-              opacity 0.35s ease,
-              transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-#ncm-left-glass-strip:hover,
-#ncm-left-edge-strip:hover {
-  width: max(5.2vw, 56px);
-  background: linear-gradient(
-    to right,
-    rgba(255, 255, 255, 0.18) 0%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0.02) 85%,
-    transparent 100%
-  );
-}
-
-#ncm-left-glass-strip:active,
-#ncm-left-edge-strip:active {
-  cursor: grabbing;
-}
-
-/* 玻璃条居中呼吸感拉手小胶囊 */
-#ncm-left-glass-strip::before,
-#ncm-left-edge-strip::before {
-  content: "";
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 48px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.18);
-  opacity: 0.65;
-  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
-  pointer-events: none;
-}
-
-#ncm-left-glass-strip:hover::before,
-#ncm-left-edge-strip:hover::before {
-  opacity: 1;
-  height: 68px;
-  width: 4.5px;
-  background: rgba(255, 255, 255, 0.45);
-  box-shadow: 0 0 14px rgba(255, 255, 255, 0.35);
-}
-
-/* 聚焦模式下的形态：滑块从左边缘平滑滑移至专辑封面右侧，向左拉/推回退出聚焦。平时100%隐形不破坏纯粹观感，悬停时优雅显现 */
+/* ===== 聚焦模式下的左侧滑块形态：滑块从左边缘平滑滑移至专辑封面右侧，同样平时100%自动隐形，有互动时优雅显现 ===== */
 body.lyrics-focus-mode #ncm-left-glass-strip,
 body.lyrics-focus-mode #ncm-left-edge-strip {
   left: calc(6.5vw + min(38vw, 380px) + 14px);
-  opacity: 0;
-  background: transparent;
-  border: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  right: auto;
   border-radius: 12px;
-  transition: left 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
-              opacity 0.25s ease,
-              background 0.25s ease;
+  border: none;
 }
 
-body.lyrics-focus-mode #ncm-left-glass-strip:hover,
-body.lyrics-focus-mode #ncm-left-edge-strip:hover {
-  opacity: 1;
-  width: max(5.2vw, 56px);
+body.lyrics-focus-mode #ncm-left-glass-strip:hover:not(.strip-idle),
+body.lyrics-focus-mode #ncm-left-edge-strip:hover:not(.strip-idle) {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(
     to left,
     rgba(255, 255, 255, 0.16) 0%,
     rgba(255, 255, 255, 0.06) 50%,
     transparent 100%
   );
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 body.lyrics-focus-mode #ncm-left-glass-strip::before,
 body.lyrics-focus-mode #ncm-left-edge-strip::before {
   left: auto;
   right: 10px;
-  opacity: 0;
-  transition: opacity 0.25s ease, height 0.25s ease, width 0.25s ease;
-}
-
-body.lyrics-focus-mode #ncm-left-glass-strip:hover::before,
-body.lyrics-focus-mode #ncm-left-edge-strip:hover::before {
-  opacity: 1;
-  height: 68px;
-  width: 4.5px;
-  background: rgba(255, 255, 255, 0.45);
-  box-shadow: 0 0 14px rgba(255, 255, 255, 0.35);
 }
 
 #amll-focus-cover-img {

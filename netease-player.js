@@ -2469,6 +2469,38 @@ if (localStorage.getItem("ncm_topbar_hidden") === "true") {
   let startTime = 0;
   let drawerWidth = 520;
 
+  // 状态辅助函数：拖拽时添加 .interacting 类保持高亮可见
+  function setStripInteracting(strip, interacting) {
+    if (strip) {
+      strip.classList.toggle("interacting", interacting);
+      strip.classList.remove("strip-idle");
+    }
+  }
+
+  // 鼠标无互动超时自动隐藏：在拖拉栏上悬停超过 2.5 秒无移动时平滑淡出隐藏，再次移动立刻唤醒
+  function setupStripIdleWatch(strip) {
+    if (!strip) return;
+    let idleTimer = null;
+    const resetIdle = () => {
+      strip.classList.remove("strip-idle");
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        if (!isDraggingDrawer && !isSwipingLeftMode) {
+          strip.classList.add("strip-idle");
+        }
+      }, 2500);
+    };
+    strip.addEventListener("mouseenter", resetIdle);
+    strip.addEventListener("mousemove", resetIdle);
+    strip.addEventListener("mouseleave", () => {
+      clearTimeout(idleTimer);
+      strip.classList.remove("strip-idle");
+    });
+  }
+
+  setupStripIdleWatch(glassStrip);
+  setupStripIdleWatch(leftGlassStrip);
+
   // 点击右侧磨砂玻璃条直接开关歌单
   if (glassStrip) {
     glassStrip.addEventListener("click", (e) => {
@@ -2517,14 +2549,17 @@ if (localStorage.getItem("ncm_topbar_hidden") === "true") {
       // 歌单抽屉已打开：在抽屉内部或遮罩层上支持向右滑动收起
       if (isInsideDrawer || e.target === drawerBackdrop) {
         isDraggingDrawer = true;
+        setStripInteracting(glassStrip, true);
       }
     } else {
       // 歌单抽屉未打开：在右侧磨砂玻璃条区域支持向左滑动拉出
       if (isRightZone && !isInsideDrawer) {
         isDraggingDrawer = true;
+        setStripInteracting(glassStrip, true);
       } else if (isLeftZone) {
         // 模式滑块：从左向右拉进入聚焦，或从右向左推退出聚焦
         isSwipingLeftMode = true;
+        setStripInteracting(leftGlassStrip, true);
       }
     }
   }, { passive: true });
@@ -2599,6 +2634,7 @@ if (localStorage.getItem("ncm_topbar_hidden") === "true") {
     // 1. 结算歌单抽屉拖拽
     if (isDraggingDrawer) {
       isDraggingDrawer = false;
+      setStripInteracting(glassStrip, false);
       drawer.style.transform = "";
       drawer.style.transition = "";
       drawer.style.visibility = "";
@@ -2628,6 +2664,7 @@ if (localStorage.getItem("ncm_topbar_hidden") === "true") {
     // 2. 结算模式滑块交互（从左拉到右进入聚焦，从右推回左退出聚焦）
     if (isSwipingLeftMode) {
       isSwipingLeftMode = false;
+      setStripInteracting(leftGlassStrip, false);
       if (leftGlassStrip) {
         leftGlassStrip.style.transform = "";
         leftGlassStrip.style.transition = "";
