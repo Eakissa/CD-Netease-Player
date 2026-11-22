@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CD Case NetEase Player</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="amll-bundle.css">
+  <link rel="stylesheet" href="netease-ui.css">
+</head>
+<body>
+  <div class="desktop-titlebar">
+    <span class="desktop-record" aria-hidden="true"></span>
+    <span class="desktop-title-text" id="desktop-app-title">CD Netease Player</span>
+  </div>
+  <!-- ===== 原插件核心 DOM 结构（保持不变） ===== -->
+  <div id="bg"><div class="left"></div><div class="right"></div></div>
+  <!-- AMLL 苹果音乐风格全景液态流动背景 -->
+  <div id="amll-focus-bg" aria-hidden="true">
+    <div id="amll-focus-bg-art"></div>
+    <div id="amll-focus-bg-gradient"></div>
+  </div>
+  <canvas id="eq"></canvas>
+  <canvas id="shadow"></canvas>
+
+  <header id="toptext"></header>
+  <section id="left">
+    <h1 id="title"></h1>
+    <div id="note"></div>
+    <div id="tracklist"><ol id="tracks"></ol><div id="marker"></div></div>
+  </section>
+  <footer id="footer"><b id="footA"></b><span id="footB"></span></footer>
+  <!-- 3D CD 盒 canvas 覆盖在所有内容之上 -->
+  <canvas id="gl"></canvas>
+  <pre id="debug"></pre>
+  <div id="mock-hint">browser preview · fake audio · press N for next track</div>
+
+  <!-- ===== 新增：网易云独立播放器 UI 层 ===== -->
+
+  <!-- 顶部右侧：登录状态与歌单开关 -->
+  <div id="ncm-topbar">
+    <span id="ncm-user">未登录</span>
+    <button id="ncm-btn-login" class="ncm-btn">扫码登录</button>
+    <button id="ncm-btn-drawer" class="ncm-btn" aria-controls="ncm-drawer" aria-expanded="false">歌单</button>
+    <button id="amll-focus-toggle" class="ncm-btn" title="歌词聚焦模式 (点击歌词也可开启)" type="button">聚焦</button>
+    <button id="amll-trans-toggle" class="ncm-btn active" title="显示/隐藏翻译" type="button">译</button>
+    <button id="amll-roma-toggle" class="ncm-btn" title="显示/隐藏罗马音" type="button">音</button>
+    <button id="ncm-btn-settings" class="ncm-btn" type="button" aria-haspopup="dialog">设置</button>
+    <button id="ncm-btn-minimize" class="ncm-btn" title="后台最小化 (托盘运行持续播放)" type="button" aria-label="后台最小化">
+      <svg viewBox="0 0 24 24" style="width:11px;height:11px;vertical-align:middle;fill:currentColor;"><path d="M5 19h14v2H5z"/></svg>
+    </button>
+    <button id="ncm-topbar-hide" class="ncm-btn" title="隐藏菜单栏 (折叠为角标)" type="button" aria-label="隐藏菜单栏">
+      <svg viewBox="0 0 24 24" style="width:11px;height:11px;vertical-align:middle;fill:currentColor;"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/></svg>
+    </button>
+  </div>
+  <!-- 顶部菜单栏折叠角标 -->
+  <button id="ncm-topbar-show" class="ncm-corner-badge" title="展开顶部菜单栏" aria-label="展开顶部菜单栏" hidden>
+    <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;"><path d="M12 16l-6-6 1.41-1.41L12 13.17l4.59-4.58L18 10z"/></svg>
+  </button>
+
+  <!-- 聚焦模式左侧：Apple Music 风格大专辑封面与曲目信息 -->
+  <div id="amll-focus-view" aria-hidden="true">
+    <div class="amll-focus-artwork-wrap">
+      <img id="amll-focus-cover-img" src="" alt="Album Artwork">
+    </div>
+    <div class="amll-focus-info">
+      <div id="amll-focus-title"></div>
+      <div id="amll-focus-artist"></div>
+      <div id="amll-focus-album"></div>
+      <div id="amll-focus-badge-wrap">
+        <span id="amll-focus-badge" class="amll-quality-pill" hidden></span>
+      </div>
+    </div>
+    <!-- 聚焦模式封面下侧播放进度条 -->
+    <div class="amll-focus-progress-wrap">
+      <input id="amll-focus-progress" type="range" min="0" max="100" value="0" step="0.1" aria-label="播放进度">
+      <div class="amll-focus-time-row">
+        <span id="amll-focus-time-cur">00:00</span>
+        <span id="amll-focus-time-tot">00:00</span>
+      </div>
+    </div>
+    <!-- 聚焦模式封面下侧播放与切歌控制器 -->
+    <div class="amll-focus-controls">
+      <button id="amll-focus-prev" type="button" class="amll-focus-btn" title="上一首 (← / Ctrl+←)" aria-label="上一首">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zm3 7 10-7v14z"/></svg>
+      </button>
+      <button id="amll-focus-play" type="button" class="amll-focus-btn play-btn" title="播放 / 暂停 (空格)" aria-label="播放" data-playing="false">
+        <svg class="focus-play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="focus-pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>
+      </button>
+      <button id="amll-focus-next" type="button" class="amll-focus-btn" title="下一首 (→ / Ctrl+→)" aria-label="下一首">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM5 5l10 7-10 7z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 右侧：Apple Music Like Lyrics (AMLL) 动态歌词直接展示区（无面板包装） -->
+  <div id="amll-container" aria-label="实时歌词"></div>
+
+  <!-- 右侧磨砂玻璃质感渐变透明图层（歌词右侧边缘空隙，支持按住向左滑动拉出歌单，点击亦可展开） -->
+  <div id="ncm-right-glass-strip" title="按住向左滑动拉出歌单 (点击亦可展开)"></div>
+
+  <!-- 左侧磨砂玻璃质感渐变透明图层（支持按住向右滑动切换聚焦模式，点击亦可展开，聚焦模式下自动隐藏） -->
+  <div id="ncm-left-glass-strip" class="ncm-left-edge-strip" title="按住向右滑动切换聚焦模式 (点击亦可切换)"></div>
+
+  <!-- 底部半透明播放控制栏 -->
+  <div id="ncm-controls">
+    <div class="transport">
+      <button id="ncm-prev" type="button" title="上一首" aria-label="上一首"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zm3 7 10-7v14z"/></svg></button>
+      <button id="ncm-play" type="button" title="播放" aria-label="播放" data-playing="false">
+        <svg class="transport-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="transport-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>
+      </button>
+      <button id="ncm-next" type="button" title="下一首" aria-label="下一首"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM5 5l10 7-10 7z"/></svg></button>
+    </div>
+    <div class="transport-timeline">
+      <span id="ncm-time-cur">00:00</span>
+      <input id="ncm-progress" type="range" min="0" max="100" value="0" step="0.1" aria-label="播放进度">
+      <span id="ncm-time-tot">00:00</span>
+    </div>
+    <span id="ncm-quality-now" hidden></span>
+    <div class="transport-volume">
+      <label for="ncm-volume" title="音量"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3z"/><path d="M15 9a4 4 0 0 1 0 6m2.5-8a7 7 0 0 1 0 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></label>
+      <input id="ncm-volume" type="range" min="0" max="1" step="0.02" value="0.7" aria-label="音量">
+    </div>
+    <select id="ncm-order" aria-label="播放顺序" title="播放顺序">
+      <option value="sequential">顺序播放</option><option value="loop">列表循环</option>
+      <option value="repeat">单曲循环</option><option value="shuffle">随机播放</option>
+    </select>
+    <button type="button" id="ncm-queue-open" title="播放列表" aria-label="播放列表" aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v2H4zm0 5h16v2H4zm0 5h10v2H4zm12-1v7l5-3.5z"/></svg>
+    </button>
+    <button type="button" id="ncm-hide-controls" title="隐藏播放栏" aria-label="隐藏播放栏">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 8 6 6 6-6 1.5 1.5-7.5 7.5-7.5-7.5z"/></svg>
+    </button>
+  </div>
+
+  <button type="button" id="ncm-show-controls" title="显示播放栏" aria-label="显示播放栏" aria-controls="ncm-controls" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+  </button>
+
+  <!-- 快捷键调节音量浮动指示 (Volume HUD Toast) -->
+  <div id="ncm-volume-toast" class="volume-toast" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+    <span id="ncm-volume-toast-text">音量 50%</span>
+  </div>
+  <dialog id="ncm-queue" aria-labelledby="ncm-queue-title">
+    <header class="settings-head">
+      <div><h2 id="ncm-queue-title">播放列表</h2><p id="ncm-queue-summary"></p></div>
+      <button type="button" id="ncm-queue-close" aria-label="关闭播放列表" hidden>×</button>
+    </header>
+    <p id="ncm-queue-empty">从歌单选一首歌，开始播放。</p>
+    <ul id="ncm-queue-list"></ul>
+  </dialog>
+
+  <!-- 右侧滑出式歌单抽屉（平时收起，不遮挡 CD 盒） -->
+  <div id="ncm-drawer-backdrop" hidden></div>
+  <aside id="ncm-drawer" class="closed" aria-labelledby="ncm-drawer-title" inert>
+    <div class="ncm-drawer-head">
+      <div class="ncm-drawer-tabs" role="tablist">
+        <button id="ncm-tab-playlists" class="ncm-drawer-tab active" role="tab" aria-selected="true">我的歌单</button>
+        <button id="ncm-tab-albums" class="ncm-drawer-tab" role="tab" aria-selected="false">收藏专辑</button>
+      </div>
+      <button id="ncm-drawer-close" type="button" title="关闭歌单 (Esc)" aria-label="关闭歌单">✕</button>
+    </div>
+
+    <!-- 歌单内曲目即时搜索栏 -->
+    <div class="ncm-drawer-search-wrap">
+      <svg class="ncm-search-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+      </svg>
+      <input id="ncm-drawer-search" type="search" placeholder="搜索歌单内曲目、歌手..." autocomplete="off" spellcheck="false" />
+      <button id="ncm-drawer-search-clear" type="button" title="清空搜索" hidden>×</button>
+    </div>
+
+    <!-- 兼容隐藏的旧结构 -->
+    <select id="ncm-playlist-select" aria-label="选择歌单" hidden><option value="">请先扫码登录...</option></select>
+    <ul id="ncm-track-list" hidden></ul>
+
+    <!-- 视图 1：我的歌单折叠手风琴列表 -->
+    <div id="ncm-playlists-view" class="ncm-drawer-view active">
+      <div id="ncm-playlist-accordion" class="ncm-accordion-container">
+        <div class="ncm-drawer-loading">请先扫码登录网易云...</div>
+      </div>
+    </div>
+
+    <!-- 视图 2：收藏专辑 CD Case 陈列 -->
+    <div id="ncm-albums-view" class="ncm-drawer-view" hidden>
+      <div id="ncm-albums-grid" class="ncm-albums-grid">
+        <div class="ncm-drawer-loading">正在加载收藏专辑...</div>
+      </div>
+    </div>
+
+    <!-- 视图 3：搜索结果列表 -->
+    <div id="ncm-search-view" class="ncm-drawer-view" hidden>
+      <div class="ncm-search-header">
+        <span id="ncm-search-summary">搜索结果</span>
+      </div>
+      <ul id="ncm-search-track-list" class="ncm-track-list"></ul>
+    </div>
+
+    <!-- 视图 4：专辑曲目详情视图 -->
+    <div id="ncm-album-detail-view" class="ncm-drawer-view" hidden>
+      <div class="ncm-album-detail-header">
+        <button type="button" id="ncm-album-detail-back" class="ncm-detail-back-btn" title="返回全部专辑">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+          <span>返回全部专辑</span>
+        </button>
+      </div>
+      <div class="ncm-album-detail-card">
+        <div id="ncm-album-detail-cd-wrap" class="ncm-detail-cd-wrap"></div>
+        <div class="ncm-album-detail-info">
+          <h3 id="ncm-album-detail-title" class="ncm-detail-title"></h3>
+          <p id="ncm-album-detail-artist" class="ncm-detail-artist"></p>
+          <p id="ncm-album-detail-meta" class="ncm-detail-meta"></p>
+          <div class="ncm-album-detail-actions">
+            <button type="button" id="ncm-album-detail-play-all" class="ncm-btn ncm-btn-primary">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+              <span>播放全部</span>
+            </button>
+            <button type="button" id="ncm-album-detail-add-all" class="ncm-btn">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              <span>加到列表</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="ncm-album-detail-list-wrap">
+        <ul id="ncm-album-detail-track-list" class="ncm-track-list"></ul>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 自定义毛玻璃右键上下文菜单 -->
+  <div id="ncm-context-menu" class="ncm-context-menu" hidden>
+    <button type="button" id="ncm-ctx-play" class="ncm-ctx-item">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+      <span>播放 (增加到当前播放列表)</span>
+    </button>
+    <button type="button" id="ncm-ctx-play-next" class="ncm-ctx-item">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+      <span>下一首播放</span>
+    </button>
+  </div>
+
+  <!-- 全局操作提示浮窗 (Toast) -->
+  <div id="ncm-player-toast" class="player-toast" hidden>
+    <span id="ncm-player-toast-text"></span>
+  </div>
+
+  <!-- 扫码登录弹窗 -->
+  <div id="ncm-qr-modal" class="hidden">
+    <div class="ncm-qr-card">
+      <h3>网易云音乐 APP 扫码登录</h3>
+      <img id="ncm-qr-img" src="" alt="二维码" />
+      <p id="ncm-qr-status">正在获取二维码...</p>
+      <div class="ncm-qr-actions">
+        <button id="ncm-qr-refresh" class="ncm-btn">刷新</button>
+        <button id="ncm-qr-close" class="ncm-btn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="ncm-settings" aria-labelledby="ncm-settings-title">
+    <header class="settings-head">
+      <h2 id="ncm-settings-title">设置</h2>
+      <button type="button" id="ncm-settings-close" aria-label="关闭设置">×</button>
+    </header>
+    <div class="settings-body">
+      <section class="settings-row">
+        <div><h3>网易云账号</h3><p id="ncm-settings-account">未登录</p></div>
+        <button type="button" class="settings-action" id="ncm-logout">退出登录</button>
+      </section>
+      <section class="settings-row">
+        <div><label for="ncm-quality">默认播放音质</label><p>从下一次加载音源起生效，实际音质以网易云返回为准。</p></div>
+        <select id="ncm-quality">
+          <option value="highest" selected>默认最高音质</option><option value="standard">标准</option><option value="higher">较高</option><option value="exhigh">极高</option>
+          <option value="lossless">无损</option><option value="hires">Hi-Res</option><option value="jyeffect">高清环绕声</option>
+          <option value="vivid">臻品全景声</option><option value="sky">沉浸环绕声</option><option value="jymaster">超清母带</option>
+        </select>
+      </section>
+      <section class="settings-row">
+        <div><label for="ncm-setting-close-action">关闭程序默认情况</label><p>点击右上角 [×] 或按 Alt+F4 时的处理方式（缩小至托盘或直接关闭退出）。</p></div>
+        <select id="ncm-setting-close-action" aria-label="关闭程序默认情况">
+          <option value="minimize">缩小到系统托盘 (后台继续播放)</option>
+          <option value="quit">直接关闭程序 (完全退出)</option>
+          <option value="ask">每次点击时询问</option>
+        </select>
+      </section>
+      <section class="settings-row">
+        <div><label for="ncm-setting-bg-mode">非聚焦模式背景配色</label><p>3D CD 盒界面下的两分色背景风格（支持经典白色+特征色，或双特征色对立呈现）。</p></div>
+        <select id="ncm-setting-bg-mode" aria-label="非聚焦模式背景配色">
+          <option value="default" selected>经典两分 (白色 + 封面特征色)</option>
+          <option value="dual-accent">双特征色 (特征色1 + 特征色2)</option>
+        </select>
+      </section>
+      <section class="settings-row settings-cache">
+        <div><h3>缓存目录 (程序文件夹内置)</h3><p id="ncm-cache-path">正在读取…</p></div>
+        <div class="settings-cache-actions">
+          <button type="button" class="settings-action" id="ncm-cache-open">打开文件夹</button>
+          <button type="button" class="settings-action" id="ncm-cache-choose">选择文件夹</button>
+          <button type="button" class="settings-action" id="ncm-cache-reset">恢复默认</button>
+        </div>
+      </section>
+      <section class="settings-row settings-cache">
+        <div><h3>AV3A / AV3V 全景声解码器</h3><p id="ncm-decoder-status">检测中…</p><p>已内置兼容 MOLAN-AV3A 的解码引擎，自动将全景声音轨下混为立体声。</p></div>
+        <div class="settings-cache-actions">
+          <button type="button" class="settings-action" id="ncm-decoder-choose">更换解码器</button>
+          <button type="button" class="settings-action" id="ncm-decoder-clear">恢复内置</button>
+        </div>
+      </section>
+      <!-- 快捷键与热键设置 (含普通、全局 Ctrl、超级全局 Ctrl+Alt) -->
+      <section class="settings-row settings-shortcuts">
+        <div>
+          <h3>快捷键与热键设置</h3>
+          <p>支持窗口内控制、Ctrl 全局热键以及 Ctrl+Alt 超级全局热键。</p>
+        </div>
+        <div class="settings-shortcuts-wrap">
+          <div class="shortcut-option-row">
+            <label class="shortcut-switch">
+              <input type="checkbox" id="ncm-opt-global-ctrl" checked />
+              <span class="switch-slider"></span>
+            </label>
+            <div class="shortcut-desc">
+              <strong>全局快捷键 (Ctrl + 键)</strong>
+              <span>在浏览器、办公或其它前台程序中直接全局切歌与控音</span>
+            </div>
+          </div>
+          <div class="shortcut-option-row">
+            <label class="shortcut-switch">
+              <input type="checkbox" id="ncm-opt-global-super" checked />
+              <span class="switch-slider"></span>
+            </label>
+            <div class="shortcut-desc">
+              <strong>超级全局快捷键 (Ctrl + Alt + 键)</strong>
+              <span>防按键冲突的高优先级全局组合，绝不干扰文字输入</span>
+            </div>
+          </div>
+          <div class="shortcut-table-scroll">
+            <table class="shortcut-table">
+              <thead>
+                <tr><th>功能</th><th>前台按键</th><th>全局热键</th><th>超级全局</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>播放 / 暂停</td><td><kbd>Space</kbd></td><td><kbd>Ctrl</kbd>+<kbd>Space</kbd></td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd></td></tr>
+                <tr><td>上一首 / 下一首</td><td><kbd>←</kbd> / <kbd>→</kbd></td><td><kbd>Ctrl</kbd>+<kbd>←</kbd> / <kbd>→</kbd></td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>←</kbd> / <kbd>→</kbd></td></tr>
+                <tr><td>音量 增加 / 减小</td><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td><kbd>Ctrl</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd></td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <p id="ncm-settings-status" role="status"></p>
+    </div>
+  </dialog>
+
+  <!-- 关闭窗口确认提问弹窗 (退出程序或最小化到托盘) -->
+  <dialog id="ncm-close-modal" aria-labelledby="ncm-close-modal-title">
+    <header class="settings-head">
+      <h2 id="ncm-close-modal-title">关闭提示</h2>
+      <button type="button" id="ncm-close-modal-close" aria-label="取消">×</button>
+    </header>
+    <div class="settings-body close-modal-body">
+      <p class="close-modal-tip">点击关闭主窗口时，您希望：</p>
+      <div class="close-modal-options">
+        <label class="close-option-item">
+          <input type="radio" name="close-action-choice" value="minimize" checked>
+          <div class="close-option-text">
+            <strong>最小化到系统托盘</strong>
+            <span>在后台持续播放音乐，不中断当前聆听</span>
+          </div>
+        </label>
+        <label class="close-option-item">
+          <input type="radio" name="close-action-choice" value="quit">
+          <div class="close-option-text">
+            <strong>退出程序</strong>
+            <span>停止播放音乐并完全退出播放器</span>
+          </div>
+        </label>
+      </div>
+      <div class="close-modal-default-check">
+        <label>
+          <input type="checkbox" id="ncm-close-modal-default">
+          <span>设置此选项为默认选项（不再询问）</span>
+        </label>
+      </div>
+      <div class="close-modal-footer">
+        <button type="button" id="ncm-close-modal-cancel" class="ncm-btn">取消</button>
+        <button type="button" id="ncm-close-modal-confirm" class="ncm-btn ncm-btn-primary">确定</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- 隐藏的 audio 元素（crossorigin 允许 Web Audio API 接管） -->
+  <audio id="ncm-audio" crossorigin="anonymous"></audio>
+
+  <!-- ===== 加载顺序：先桥接 → AMLL → 原插件 → 最后网易云播放器 ===== -->
+  <script src="we-bridge.js"></script>
+  <script src="amll-bundle.js"></script>
+  <script src="amll-player.js"></script>
+  <script src="bundle.js"></script>
+  <script src="netease-player.js"></script>
+</body>
+</html>

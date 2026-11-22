@@ -1,0 +1,154 @@
+:root {
+  /* the NO DISC colours (main.js takes them from the idle sleeve at startup): the page shows them
+     from its first frame, not a default blue */
+  --accent: rgb(110, 116, 125);
+  --light: rgb(201, 203, 207);
+  --deep: rgb(48, 50, 54);
+  --font: Bahnschrift, "Segoe UI", "Yu Gothic UI", "Meiryo", sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--light); font-family: var(--font); font-stretch: var(--font-stretch, normal); }
+body { opacity: 0; transition: opacity 0.8s; }
+body.ready { opacity: 1; }
+
+/* ---------- two-tone diagonal background ---------- */
+#bg, #bg > div { position: absolute; inset: 0; }
+#bg .left {
+  background:
+    radial-gradient(ellipse 60% 80% at 30% 40%, rgba(255, 255, 255, 0.28), transparent 70%),
+    var(--light);
+}
+/* dark mode: the page side is a tinted charcoal; the soft white bloom on it would read as haze */
+body.dark #bg .left {
+  background:
+    radial-gradient(ellipse 60% 80% at 30% 40%, rgba(255, 255, 255, 0.05), transparent 70%),
+    var(--light);
+}
+body.dark #tracks li { color: rgba(var(--ink), 0.5); }
+body.dark #tracks li.current { color: rgb(var(--ink)); }
+#bg .right {
+  /* --split-shift moves the whole diagonal sideways ("Background split position", 0 = default) */
+  clip-path: polygon(calc(40% + var(--split-shift, 0%)) 0, 100% 0, 100% 100%, calc(72% + var(--split-shift, 0%)) 100%);
+  background:
+    radial-gradient(ellipse 50% 70% at 70% 45%, rgba(255, 255, 255, 0.16), transparent 70%),
+    linear-gradient(160deg, var(--accent), var(--accent-dark));
+}
+/* "Accent gradient": the panel runs from the accent to --grad-end (the cover's second colour, or a
+   darker / lighter accent for the one-colour kind, set from JS). --grad-angle turns
+   it (180deg = top to bottom), --grad-stretch is how long the blend is, centred on the screen
+   (100% = across the whole screen, less = a sharper band, more = the end colours never fully reached) */
+body.bg-gradient #bg .right {
+  background:
+    radial-gradient(ellipse 50% 70% at 70% 45%, rgba(255, 255, 255, 0.12), transparent 70%),
+    linear-gradient(var(--grad-angle, 180deg),
+      var(--accent) calc(50% - var(--grad-stretch, 100%) / 2),
+      var(--grad-end) calc(50% + var(--grad-stretch, 100%) / 2));
+}
+/* "Background darkness": black laid over both sides, 100% = pure black for OLED.
+   Only the page background: the title, case, spectrum and texts keep their colours. */
+#bg::after { content: ''; position: absolute; inset: 0; background: #000; opacity: var(--bg-dim, 0); }
+
+/* 3D canvas is cropped to the case + shadow area; position/size are set from JS */
+#gl, #shadow { position: absolute; left: 0; top: 0; pointer-events: none; }
+/* --eq-amp scales how far the lines can reach, --eq-h is the height, centred on the case (a little
+   below the screen's middle) - but never past the screen's edges: at 100% it is the whole height
+   exactly, not half a percent off the top and as much over the bottom. The canvas is 3x that
+   reach wide (HEADROOM in equalizer.js): the extra room to the left is for loud hits overshooting */
+#eq {
+  position: absolute; right: 8.5vw; top: max(0vh, min(calc(12.5vh + (76vh - var(--eq-h, 76vh)) / 2), calc(100vh - var(--eq-h, 76vh))));
+  width: calc(17vw * var(--eq-amp, 1) * 3); height: var(--eq-h, 76vh); pointer-events: none;
+}
+body.paused #eq { opacity: 0.45; }
+body.no-eq #eq { display: none; }
+/* the left column keeps its layout: a hidden item still takes its space, so the rest stays put */
+body.no-album #title, body.no-artist #note, body.no-tracks #tracklist { visibility: hidden; }
+
+/* ---------- text ---------- */
+/* --ink: the colour of the texts that are white by default (top text, tracklist with its underline,
+   footer), as "r, g, b". The "black …" switches turn each one black. Each text can also have its
+   own colour (--top-color etc., custom text layout), which wins over both. */
+:root { --ink: 255, 255, 255; }
+body.dark-top #toptext, body.dark-list #tracklist, body.dark-footer #footer { --ink: 0, 0, 0; }
+#toptext {
+  position: absolute; left: 50%; top: 5vh; transform: translateX(-50%);
+  color: var(--top-color, rgb(var(--ink))); font-weight: 700; font-size: calc(2.1vh * var(--top-scale, 1) * var(--fit, 1));
+  --ls: calc(0.6em + var(--top-ls, 0em) + var(--font-ls, 0em)); letter-spacing: var(--ls);
+  font-variant-numeric: tabular-nums; /* a running clock must not jitter sideways */
+  text-shadow: 0 0.2vh 1vh rgba(0, 0, 0, 0.15);
+}
+
+#left { position: absolute; left: var(--pad-left, 7.5vw); top: var(--pad-top, 9vh); width: 34vw; }
+#title {
+  /* its own font (the "Album name font" setting); no faked bold for a font that has none */
+  font-family: var(--font-title, var(--font)); font-stretch: var(--font-title-stretch, normal); font-synthesis: none;
+  color: var(--album-color, var(--accent)); font-weight: 600; line-height: 0.95;
+  --ls: calc(-0.01em + var(--album-ls, 0em) + var(--font-title-ls, 0em)); letter-spacing: var(--ls);
+  /* no overflow clipping here: it would cut the glow (text-shadow) off at the box edge */
+  width: 100%; overflow-wrap: break-word; text-wrap: balance;
+  text-shadow: 0 0.3vh 1.6vh var(--accent-glow);
+}
+#note {
+  margin-top: 1.4vh; color: var(--artist-color, var(--note, var(--deep))); font-size: calc(2.2vh * var(--artist-scale, 1) * var(--fit, 1));
+  --ls: calc(0.45em + var(--artist-ls, 0em) + var(--font-ls, 0em)); letter-spacing: var(--ls);
+  opacity: 0.8;
+}
+#tracklist { position: relative; margin-top: 5vh; }
+#tracks { list-style: none; }
+#tracks li {
+  color: rgba(var(--ink), 0.62); font-size: calc(2.45vh * var(--list-scale, 1) * var(--fit, 1)); line-height: 1.6;
+  letter-spacing: calc(0.12em + var(--list-ls, 0em) + var(--font-ls, 0em));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 0.1vh 0.4vh rgba(0, 0, 0, 0.12);
+}
+#tracks li.current { color: rgb(var(--ink)); }
+#tracks li .name { display: inline-block; max-width: calc(100% - 2.6vw * var(--list-scale, 1)); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+#marker {
+  position: absolute; left: 0; top: 0; height: 0.2vh; background: rgb(var(--ink)); opacity: 0;
+  transform-origin: 0 50%; pointer-events: none; will-change: transform;
+  box-shadow: 0 0 0.6vh rgba(var(--ink), 0.5);
+}
+/* the tracklist in its own colour: the other rows dimmed by opacity instead of a lighter colour */
+body.list-color #tracks li { color: var(--list-color); opacity: 0.62; }
+body.list-color #tracks li.current { color: var(--list-color); opacity: 1; }
+body.list-color #marker { background: var(--list-color); box-shadow: none; }
+/* "only caps" per text (the artist line has it by default) */
+body.caps-top #toptext, body.caps-album #title, body.caps-artist #note,
+body.caps-list #tracks li, body.caps-footer #footer { text-transform: uppercase; }
+#tracks .num { display: inline-block; width: calc(2.6vw * var(--list-scale, 1)); font-size: calc(1.8vh * var(--list-scale, 1) * var(--fit, 1)); }
+
+/* optional hollow frames round the texts. Letter-spacing also trails the last letter, so the right
+   padding gives it back and the text sits centred in the box. */
+body.frame-top #toptext, body.frame-artist #note {
+  border: max(1px, 0.12vh) solid currentColor;
+  padding: 0.6em max(0em, calc(1.1em - var(--ls))) 0.6em 1.1em;
+}
+body.frame-album #title {
+  width: fit-content; max-width: 100%;
+  border: max(1px, 0.15vh) solid currentColor;
+  padding: 0.12em max(0em, calc(0.22em - var(--ls))) 0.12em 0.22em;
+}
+body.frame-artist #note { width: fit-content; max-width: 100%; }
+/* top text lined up with the left column instead of centred */
+body.top-left #toptext { left: var(--pad-left, 7.5vw); transform: none; }
+
+#footer {
+  /* the wallpaper runs under the taskbar (48 px = 4.4vh at 1080p): sit clear above it */
+  position: absolute; left: 50%; bottom: var(--foot-bottom, 7vh); transform: translateX(-50%);
+  text-align: center; color: var(--footer-color, rgb(var(--ink))); font-size: 1.4vh; letter-spacing: calc(0.08em + var(--font-ls, 0em));
+}
+#footer b, #footer span { display: block; }
+#footer span { font-size: 1vh; opacity: 0.8; margin-top: 0.4vh; }
+
+#mock-hint {
+  display: none; position: absolute; left: 1vw; bottom: 1vh;
+  font: 12px var(--font); color: rgba(0, 0, 0, 0.35);
+}
+body.mock #mock-hint { display: block; }
+
+#debug {
+  display: none; position: absolute; left: 1vw; top: 1vh; z-index: 10; margin: 0;
+  padding: 8px 10px; background: rgba(0, 0, 0, 0.7); color: #9f9;
+  font: 12px/1.45 Consolas, monospace; white-space: pre; pointer-events: none;
+}
+body.debug #debug { display: block; }

@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production / Packaging outputs
+dist/
+build/
+stage_prod/
+*.asar
+*.zip
+
+# Local Cache & Runtime Data
+cache/
+.cache/
+*.log
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
