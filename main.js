@@ -2,10 +2,90 @@
 // 功能：内置启动 NeteaseCloudMusicApi，然后创建播放器窗口
 // 双击 exe 即可使用，无需手动开 3000 端口
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, globalShortcut, dialog } = require("electron");
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, globalShortcut, dialog, shell } = require("electron");
 const path = require("path");
 const http = require("http");
+const https = require("https");
 const { installArtworkCache } = require("./artwork-cache");
+
+const currentAppVersion = require("./package.json").version || "1.0.0";
+
+function compareVersions(v1, v2) {
+  const p1 = (v1 || "").replace(/^v/i, "").split(".").map(n => parseInt(n, 10) || 0);
+  const p2 = (v2 || "").replace(/^v/i, "").split(".").map(n => parseInt(n, 10) || 0);
+  const len = Math.max(p1.length, p2.length);
+  for (let i = 0; i < len; i++) {
+    const num1 = p1[i] || 0;
+    const num2 = p2[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
+function checkGitHubRelease() {
+  return new Promise((resolve) => {
+    const options = {
+      hostname: "api.github.com",
+      path: "/repos/Eakissa/CD-Netease-Player/releases/latest",
+      method: "GET",
+      headers: {
+        "User-Agent": "CD-Netease-Player-Desktop",
+        "Accept": "application/vnd.github.v3+json",
+      },
+      timeout: 8000,
+    };
+    const req = https.request(options, (res) => {
+      let body = "";
+      res.on("data", (chunk) => { body += chunk; });
+      res.on("end", () => {
+        if (res.statusCode === 200) {
+          try {
+            const data = JSON.parse(body);
+            const latestTag = data.tag_name || "";
+            const hasUpdate = compareVersions(latestTag, currentAppVersion) > 0;
+            resolve({
+              success: true,
+              hasUpdate,
+              currentVersion: currentAppVersion,
+              latestVersion: latestTag.replace(/^v/i, ""),
+              tagName: latestTag,
+              name: data.name || latestTag,
+              body: data.body || "",
+              htmlUrl: data.html_url || "https://github.com/Eakissa/CD-Netease-Player/releases",
+              publishedAt: data.published_at,
+              assets: (data.assets || []).map(a => ({
+                name: a.name,
+                size: a.size,
+                downloadUrl: a.browser_download_url,
+              })),
+            });
+          } catch (err) {
+            resolve({ success: false, currentVersion: currentAppVersion, message: "解析版本信息失败" });
+          }
+        } else if (res.statusCode === 404) {
+          resolve({
+            success: true,
+            hasUpdate: false,
+            currentVersion: currentAppVersion,
+            latestVersion: currentAppVersion,
+            message: "当前已是最新版本 (暂未发布新 Release)",
+          });
+        } else {
+          resolve({ success: false, currentVersion: currentAppVersion, message: `GitHub 返回 HTTP ${res.statusCode}` });
+        }
+      });
+    });
+    req.on("error", (err) => {
+      resolve({ success: false, currentVersion: currentAppVersion, message: "网络连接失败: " + err.message });
+    });
+    req.on("timeout", () => {
+      req.destroy();
+      resolve({ success: false, currentVersion: currentAppVersion, message: "检查更新请求超时" });
+    });
+    req.end();
+  });
+}
 
 // ===== 单实例锁检测 (防止重复开启) =====
 const gotTheLock = app.requestSingleInstanceLock();
@@ -329,6 +409,22 @@ app.whenReady().then(async () => {
       currentTrackStatus = { ...currentTrackStatus, ...status };
       updateTrayMenu();
     }
+  });
+
+  ipcMain.handle("app:check-update", async () => {
+    return await checkGitHubRelease();
+  });
+
+  ipcMain.handle("app:open-external", async (_, url) => {
+    if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+      await shell.openExternal(url);
+      return true;
+    }
+    return false;
+  });
+
+  ipcMain.handle("app:get-version", () => {
+    return currentAppVersion;
   });
 
   app.on("activate", () => {

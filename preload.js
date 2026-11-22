@@ -38,4 +38,7 @@ contextBridge.exposeInMainWorld("CDCaseApp", {
   updateTrackStatus: status => {
     ipcRenderer.send("app:update-track", status);
   },
+  checkUpdate: () => ipcRenderer.invoke("app:check-update"),
+  openExternal: url => ipcRenderer.invoke("app:open-external", url),
+  getVersion: () => ipcRenderer.invoke("app:get-version"),
 });

@@ -45,7 +45,7 @@
     <button id="amll-focus-toggle" class="ncm-btn" title="歌词聚焦模式 (点击歌词也可开启)" type="button">聚焦</button>
     <button id="amll-trans-toggle" class="ncm-btn active" title="显示/隐藏翻译" type="button">译</button>
     <button id="amll-roma-toggle" class="ncm-btn" title="显示/隐藏罗马音" type="button">音</button>
-    <button id="ncm-btn-settings" class="ncm-btn" type="button" aria-haspopup="dialog">设置</button>
+    <button id="ncm-btn-settings" class="ncm-btn" type="button" aria-haspopup="dialog">设置<span id="ncm-update-dot" class="update-dot" hidden></span></button>
     <button id="ncm-btn-minimize" class="ncm-btn" title="后台最小化 (托盘运行持续播放)" type="button" aria-label="后台最小化">
       <svg viewBox="0 0 24 24" style="width:11px;height:11px;vertical-align:middle;fill:currentColor;"><path d="M5 19h14v2H5z"/></svg>
     </button>
@@ -350,7 +350,41 @@
           </div>
         </div>
       </section>
+      <!-- 软件版本与在线更新检测 -->
+      <section class="settings-row settings-update">
+        <div>
+          <h3>版本与在线更新</h3>
+          <p id="ncm-version-display">当前版本：v1.0.0</p>
+          <p id="ncm-update-status" class="update-subtext">点击右侧按钮可检测最新版本</p>
+        </div>
+        <div class="settings-cache-actions">
+          <button type="button" class="settings-action" id="ncm-check-update-btn">检查更新</button>
+          <button type="button" class="settings-action primary-accent" id="ncm-open-release-btn" hidden>前往更新</button>
+        </div>
+      </section>
       <p id="ncm-settings-status" role="status"></p>
+    </div>
+  </dialog>
+
+  <!-- 发现新版本更新弹窗 -->
+  <dialog id="ncm-update-modal" aria-labelledby="ncm-update-modal-title">
+    <header class="settings-head">
+      <h2 id="ncm-update-modal-title">🎉 发现新版本</h2>
+      <button type="button" id="ncm-update-modal-close" aria-label="关闭">×</button>
+    </header>
+    <div class="settings-body update-modal-body">
+      <div class="update-modal-meta">
+        <span class="update-tag-pill" id="ncm-update-new-tag">v1.0.1</span>
+        <span class="update-cur-text" id="ncm-update-cur-tag">当前版本: v1.0.0</span>
+      </div>
+      <div class="update-release-box">
+        <h4 id="ncm-update-release-name">更新内容</h4>
+        <div id="ncm-update-notes" class="update-notes-scroll"></div>
+      </div>
+      <div class="update-modal-footer">
+        <button type="button" id="ncm-update-ignore-btn" class="ncm-btn">稍后提醒</button>
+        <button type="button" id="ncm-update-confirm-btn" class="ncm-btn ncm-btn-primary">前往发布页下载</button>
+      </div>
     </div>
   </dialog>
 

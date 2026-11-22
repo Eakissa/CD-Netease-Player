@@ -1708,6 +1708,12 @@ $("ncm-btn-settings").onclick = () => {
     const curAction = localStorage.getItem("ncm_close_action") || "ask";
     closeActionSelect.value = ["ask", "minimize", "quit"].includes(curAction) ? curAction : "ask";
   }
+  if (window.CDCaseApp?.getVersion) {
+    window.CDCaseApp.getVersion().then(ver => {
+      const el = $("ncm-version-display");
+      if (el && ver) el.textContent = `当前版本：v${ver}`;
+    }).catch(() => {});
+  }
   settings.showModal();
   if (desktopAudio) updateDecoder(desktopAudio.decoder);
   else {
@@ -1729,6 +1735,153 @@ if (btnCacheOpen) {
 }
 cacheControls[0].onclick = () => updateCacheDirectory(desktop.chooseCacheDirectory);
 cacheControls[1].onclick = () => updateCacheDirectory(desktop.resetCacheDirectory);
+
+// ===== 软件版本与在线更新检测模块 =====
+let latestReleaseInfo = null;
+
+async function checkAppUpdates(silent = false) {
+  const versionDisplay = $("ncm-version-display");
+  const updateStatus = $("ncm-update-status");
+  const checkBtn = $("ncm-check-update-btn");
+  const openReleaseBtn = $("ncm-open-release-btn");
+  const updateDot = $("ncm-update-dot");
+  const appBridge = window.CDCaseApp;
+
+  if (!appBridge?.checkUpdate) {
+    if (updateStatus) updateStatus.textContent = "当前环境不支持在线检查更新。";
+    return;
+  }
+
+  if (checkBtn) checkBtn.disabled = true;
+  if (!silent && updateStatus) {
+    updateStatus.className = "update-subtext";
+    updateStatus.textContent = "正在连接 GitHub 检测最新版本…";
+  }
+
+  try {
+    const result = await appBridge.checkUpdate();
+    if (!result) throw new Error("未获取到检查结果");
+
+    if (versionDisplay && result.currentVersion) {
+      versionDisplay.textContent = `当前版本：v${result.currentVersion}`;
+    }
+
+    if (result.success) {
+      if (result.hasUpdate) {
+        latestReleaseInfo = result;
+        if (updateStatus) {
+          updateStatus.className = "update-subtext has-update";
+          updateStatus.textContent = `发现新版本：${result.tagName}（${result.name}）`;
+        }
+        if (openReleaseBtn) openReleaseBtn.hidden = false;
+        if (updateDot) updateDot.hidden = false;
+
+        // 如果不是静默模式，或者用户本次会话尚未忽略过此新版本，则弹出提示对话框
+        const ignored = sessionStorage.getItem("ncm_update_ignored_tag");
+        if (!silent || ignored !== result.tagName) {
+          showUpdateModal(result);
+        }
+      } else {
+        if (updateStatus) {
+          updateStatus.className = "update-subtext";
+          updateStatus.textContent = `当前已是最新版本 (v${result.currentVersion})，无需更新。`;
+        }
+        if (openReleaseBtn) openReleaseBtn.hidden = true;
+        if (updateDot) updateDot.hidden = true;
+      }
+    } else {
+      if (!silent && updateStatus) {
+        updateStatus.className = "update-subtext error";
+        updateStatus.textContent = `检测更新失败：${result.message || "网络异常"}`;
+      }
+    }
+  } catch (err) {
+    if (!silent && updateStatus) {
+      updateStatus.className = "update-subtext error";
+      updateStatus.textContent = `检查更新发生异常：${err.message || err}`;
+    }
+  } finally {
+    if (checkBtn) checkBtn.disabled = false;
+  }
+}
+
+function showUpdateModal(release) {
+  const modal = $("ncm-update-modal");
+  if (!modal) return;
+  const newTagEl = $("ncm-update-new-tag");
+  const curTagEl = $("ncm-update-cur-tag");
+  const relNameEl = $("ncm-update-release-name");
+  const notesEl = $("ncm-update-notes");
+
+  if (newTagEl) newTagEl.textContent = release.tagName || `v${release.latestVersion}`;
+  if (curTagEl) curTagEl.textContent = `当前版本: v${release.currentVersion}`;
+  if (relNameEl) relNameEl.textContent = release.name || release.tagName;
+
+  let notesText = release.body || "暂无详细更新说明。";
+  if (release.assets && release.assets.length > 0) {
+    const assetList = release.assets
+      .map(a => `• ${a.name} (${(a.size / (1024 * 1024)).toFixed(1)} MB)`)
+      .join("\n");
+    notesText += `\n\n【提供下载的安装文件】：\n${assetList}`;
+  }
+  if (notesEl) notesEl.textContent = notesText;
+
+  if (!modal.open) modal.showModal();
+}
+
+function initAppUpdater() {
+  const checkBtn = $("ncm-check-update-btn");
+  const openReleaseBtn = $("ncm-open-release-btn");
+  const modal = $("ncm-update-modal");
+  const modalClose = $("ncm-update-modal-close");
+  const modalIgnore = $("ncm-update-ignore-btn");
+  const modalConfirm = $("ncm-update-confirm-btn");
+  const appBridge = window.CDCaseApp;
+
+  // 初始化当前版本号显示
+  if (appBridge?.getVersion) {
+    appBridge.getVersion().then(ver => {
+      const versionDisplay = $("ncm-version-display");
+      if (versionDisplay && ver) {
+        versionDisplay.textContent = `当前版本：v${ver}`;
+      }
+    }).catch(() => {});
+  }
+
+  if (checkBtn) {
+    checkBtn.onclick = () => checkAppUpdates(false);
+  }
+
+  const openReleasePage = () => {
+    const url = latestReleaseInfo?.htmlUrl || "https://github.com/Eakissa/CD-Netease-Player/releases";
+    if (appBridge?.openExternal) {
+      appBridge.openExternal(url);
+    } else {
+      window.open(url, "_blank");
+    }
+    modal?.close();
+  };
+
+  if (openReleaseBtn) openReleaseBtn.onclick = openReleasePage;
+  if (modalConfirm) modalConfirm.onclick = openReleasePage;
+
+  if (modalClose) modalClose.onclick = () => modal?.close();
+  if (modalIgnore) {
+    modalIgnore.onclick = () => {
+      if (latestReleaseInfo?.tagName) {
+        sessionStorage.setItem("ncm_update_ignored_tag", latestReleaseInfo.tagName);
+      }
+      modal?.close();
+    };
+  }
+
+  // 启动 3.5 秒后在后台静默检查一次是否有新发布
+  setTimeout(() => {
+    checkAppUpdates(true);
+  }, 3500);
+}
+
+initAppUpdater();
 
 $("ncm-logout").onclick = async () => {
   if (!cookie) return;

@@ -2180,6 +2180,160 @@ body.bg-dual-accent #left #tracks li.current {
   text-shadow: 0 0 12px rgba(255, 255, 255, 0.55) !important;
 }
 
+/* ===== 版本更新检测与弹窗样式 ===== */
+.update-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background: #ff4757;
+  border-radius: 50%;
+  margin-left: 5px;
+  vertical-align: middle;
+  box-shadow: 0 0 6px #ff4757;
+  animation: pulse-dot 1.8s infinite;
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.8; }
+}
+
+.settings-action.primary-accent {
+  background: #e54d42;
+  color: #fff;
+  border-color: #ff6358;
+}
+.settings-action.primary-accent:hover {
+  background: #f05a4f;
+}
+
+.update-subtext {
+  font-size: 12px;
+  color: #8c93a8;
+  margin-top: 4px;
+}
+.update-subtext.has-update {
+  color: #2ed573;
+  font-weight: 600;
+}
+.update-subtext.error {
+  color: #ff6b6b;
+}
+
+#ncm-update-modal {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(480px, calc(100vw - 40px));
+  background: rgba(26, 29, 38, 0.96);
+  border: 1px solid #343745;
+  border-radius: 14px;
+  color: #f0f0f5;
+  color-scheme: dark;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.7);
+  font: 14px "Segoe UI", sans-serif;
+  padding: 0;
+  z-index: 1000;
+}
+
+#ncm-update-modal::backdrop {
+  background: rgba(10, 12, 18, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.update-modal-body {
+  padding: 18px 22px 20px !important;
+}
+
+.update-modal-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.update-tag-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  font-weight: bold;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.update-cur-text {
+  font-size: 12px;
+  color: #8c93a8;
+}
+
+.update-release-box {
+  margin-bottom: 18px;
+}
+
+.update-release-box h4 {
+  font-size: 13px;
+  color: #bac0d0;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.update-notes-scroll {
+  max-height: 180px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #d8dbe5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.update-notes-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.update-notes-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.update-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.update-modal-footer .ncm-btn {
+  padding: 7px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid #484c5b;
+  background: #292d38;
+  color: #fff;
+  transition: all 0.2s ease;
+}
+
+.update-modal-footer .ncm-btn:hover {
+  background: #383e4e;
+}
+
+.update-modal-footer .ncm-btn-primary {
+  background: #e54d42;
+  color: #fff;
+  border: 1px solid #ff6358;
+}
+
+.update-modal-footer .ncm-btn-primary:hover {
+  background: #f05a4f;
+}
+
 
 
 
