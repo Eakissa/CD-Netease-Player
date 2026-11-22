@@ -98,8 +98,8 @@ npm run build
    - 网易云音乐 Node.js API 引擎，采用 **MIT** 协议。
 3. **[MOLAN-AV3A](https://github.com/baiji6/MOLAN-AV3A)**
    - AVS3 Audio (Audio Vivid) 解码引擎及社区算法实现。
-4. **3D CD 盒视觉引擎**
-   - 核心 3D WebGL 亚克力 CD 包装盒模型、着色器与视觉渲染灵感移植自 Wallpaper Engine 创意工坊社区作品，在此向原作者致以崇高敬意。
+4. **[Spinning CD Case — Music Visualizer](https://steamcommunity.com/sharedfiles/filedetails/?id=3828403978)** (Steam Workshop ID: `3828403978`)
+   - 核心 3D WebGL 亚克力 CD 包装盒模型、着色器与动态视觉渲染移植自 Steam Wallpaper Engine 创意工坊作者 **[sbeuwu](https://ko-fi.com/sbeuwu)** 的优秀独立作品，在此向原作者致以崇高敬意。
 5. **全套字体资产 (`fonts/`)**
    - 均采用 **SIL Open Font License 1.1 (OFL)** 协议开源（附带官方许可证文件）。
 
