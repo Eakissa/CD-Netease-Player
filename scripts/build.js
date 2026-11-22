@@ -7,7 +7,9 @@ const distBase = path.resolve(sourceDir, '../dist');
 const version = require(path.join(sourceDir, 'package.json')).version || '1.0.3';
 const stagingDir = path.join(distBase, 'staging_app');
 const distAppDir = path.join(distBase, `CD-Netease-Player-v${version}-win-x64`);
-const templateDir = path.join(distBase, 'CD-Netease-Player-v1.0.0-win-x64');
+const v103Dir = path.join(distBase, 'CD-Netease-Player-v1.0.3-win-x64');
+const v100Dir = path.join(distBase, 'CD-Netease-Player-v1.0.0-win-x64');
+const templateDir = fs.existsSync(v103Dir) ? v103Dir : v100Dir;
 
 console.log(`🚀 Building CD Netease Player v${version}...`);
 

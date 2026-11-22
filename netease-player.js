@@ -3087,45 +3087,125 @@ if (localStorage.getItem("ncm_topbar_hidden") === "true") {
   });
 })();
 
-// ===== 14. 菜单栏与折叠按钮无交互闲置时自动平滑隐藏 =====
-(function initIdleUiAutoFade() {
-  let uiIdleTimer = null;
+// ===== 14. 菜单栏与折叠按钮位置悬浮显现交互（移至其位置才显示，离开其位置自动平滑隐藏） =====
+(function initHoverPositionUiController() {
+  const topbar = $("ncm-topbar");
+  const topbarShow = $("ncm-topbar-show");
+  const controls = $("ncm-controls");
+  const controlsShow = $("ncm-show-controls");
+
+  let topbarHideTimer = null;
+  let controlsHideTimer = null;
   let isPointerDown = false;
 
-  function resetIdle() {
-    document.body.classList.remove("ui-idle");
-    clearTimeout(uiIdleTimer);
-
-    // 检查是否有弹窗、抽屉打开，或用户正在按住拖拽/输入
-    const isModalOpen = !!document.querySelector("dialog[open], #ncm-drawer:not(.closed), #ncm-qr-modal:not(.hidden)");
-    const isTyping = document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName);
-    if (isModalOpen || isPointerDown || isTyping) {
-      return;
-    }
-
-    uiIdleTimer = setTimeout(() => {
-      const stillModalOpen = !!document.querySelector("dialog[open], #ncm-drawer:not(.closed), #ncm-qr-modal:not(.hidden)");
-      const stillTyping = document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName);
-      if (!stillModalOpen && !isPointerDown && !stillTyping) {
-        document.body.classList.add("ui-idle");
-      }
-    }, 2800);
+  function showTopbar() {
+    clearTimeout(topbarHideTimer);
+    topbar?.classList.add("hover-revealed");
+    topbarShow?.classList.add("hover-revealed");
   }
 
-  window.addEventListener("mousemove", resetIdle, { passive: true });
-  window.addEventListener("mousedown", () => {
-    isPointerDown = true;
-    resetIdle();
-  }, { passive: true });
-  window.addEventListener("mouseup", () => {
-    isPointerDown = false;
-    resetIdle();
-  }, { passive: true });
-  window.addEventListener("keydown", resetIdle, { passive: true });
-  window.addEventListener("wheel", resetIdle, { passive: true });
-  window.addEventListener("touchstart", resetIdle, { passive: true });
+  function hideTopbar(delay = 240) {
+    clearTimeout(topbarHideTimer);
+    topbarHideTimer = setTimeout(() => {
+      const isModalOpen = !!document.querySelector("dialog[open], #ncm-qr-modal:not(.hidden)");
+      const isDrawerOpen = document.body.classList.contains("ncm-drawer-open");
+      if (!isModalOpen && !isDrawerOpen) {
+        topbar?.classList.remove("hover-revealed");
+        topbarShow?.classList.remove("hover-revealed");
+      }
+    }, delay);
+  }
 
-  resetIdle();
+  function showControls() {
+    clearTimeout(controlsHideTimer);
+    controls?.classList.add("hover-revealed");
+    controlsShow?.classList.add("hover-revealed");
+  }
+
+  function hideControls(delay = 240) {
+    clearTimeout(controlsHideTimer);
+    controlsHideTimer = setTimeout(() => {
+      const isQueueOpen = $("ncm-queue") && $("ncm-queue").open;
+      if (!isPointerDown && !isQueueOpen) {
+        controls?.classList.remove("hover-revealed");
+        controlsShow?.classList.remove("hover-revealed");
+      }
+    }, delay);
+  }
+
+  function onPointerMove(e) {
+    const x = e.clientX;
+    const y = e.clientY;
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+
+    // 1. 判断鼠标是否在顶部菜单/顶部折叠按钮的指定位置区域
+    const isTopbarHidden = document.body.classList.contains("ncm-topbar-hidden");
+    let isOverTop = false;
+
+    if (!isTopbarHidden && topbar) {
+      const r = topbar.getBoundingClientRect();
+      isOverTop = (x >= r.left - 20 && x <= r.right + 20 && y >= 0 && y <= r.bottom + 20) ||
+                  (y <= 75 && x >= winW - 520);
+    } else if (isTopbarHidden && topbarShow && !topbarShow.hidden) {
+      const r = topbarShow.getBoundingClientRect();
+      isOverTop = (x >= r.left - 25 && x <= winW && y >= 0 && y <= r.bottom + 25) ||
+                  (y <= 75 && x >= winW - 90);
+    }
+
+    if (isOverTop) {
+      showTopbar();
+    } else {
+      hideTopbar();
+    }
+
+    // 2. 判断鼠标是否在底部控制栏/底部折叠按钮的指定位置区域
+    const isControlsHidden = document.body.classList.contains("ncm-controls-hidden");
+    let isOverBottom = false;
+
+    if (!isControlsHidden && controls && !controls.hidden) {
+      const r = controls.getBoundingClientRect();
+      isOverBottom = (x >= r.left - 30 && x <= r.right + 30 && y >= r.top - 25 && y <= winH) ||
+                     (y >= winH - 85);
+    } else if (isControlsHidden && controlsShow && !controlsShow.hidden) {
+      const r = controlsShow.getBoundingClientRect();
+      isOverBottom = (x >= r.left - 25 && x <= winW && y >= r.top - 25 && y <= winH) ||
+                     (y >= winH - 75 && x >= winW - 90);
+    }
+
+    if (isOverBottom || isPointerDown) {
+      showControls();
+    } else {
+      hideControls();
+    }
+  }
+
+  window.addEventListener("pointermove", onPointerMove, { passive: true });
+  window.addEventListener("pointerdown", (e) => {
+    isPointerDown = true;
+    const target = e.target;
+    if (controls?.contains(target) || controlsShow?.contains(target)) {
+      showControls();
+    }
+    if (topbar?.contains(target) || topbarShow?.contains(target)) {
+      showTopbar();
+    }
+  }, { passive: true });
+
+  window.addEventListener("pointerup", () => {
+    isPointerDown = false;
+    hideControls(350);
+  }, { passive: true });
+
+  window.addEventListener("mouseleave", () => {
+    if (!isPointerDown) {
+      hideTopbar(100);
+      hideControls(100);
+    }
+  }, { passive: true });
+
+  topbar?.addEventListener("focusin", showTopbar);
+  controls?.addEventListener("focusin", showControls);
 })();
 
 console.log("[NCM Player] 网易云播放器初始化完成 (含 AMLL 歌词引擎与 AV3A/AV3V 解码器)");
