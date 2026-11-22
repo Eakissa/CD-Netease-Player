@@ -595,14 +595,24 @@ app.whenReady().then(async () => {
       }
 
       // 智能选取最合适的更新包：
-      // 1. 优先找 app.asar (约 76MB，速度最快且无需解压)
-      // 2. 其次找 Windows 相关的 zip 全量包 (约 130MB，下载后自动提取 resources/app.asar)
+      // 1. 优先找极速轻量更新压缩包 app-update.zip (仅约 20~30MB，体积大幅缩减 70%~80%)
+      // 2. 其次找 app.asar 核心文件
+      // 3. 再次找 Windows 相关的 zip 全量包 (下载后自动提取 app.asar)
       let targetAsset = assets.find(a => {
         const n = (a.name || "").toLowerCase();
-        return n === "app.asar" || n.endsWith(".asar");
+        return n === "app-update.zip" || (n.includes("update") && n.endsWith(".zip") && !n.includes("win-x64"));
       });
 
       let isZip = false;
+      if (targetAsset) {
+        isZip = true;
+      } else {
+        targetAsset = assets.find(a => {
+          const n = (a.name || "").toLowerCase();
+          return n === "app.asar" || n.endsWith(".asar");
+        });
+      }
+
       if (!targetAsset) {
         targetAsset = assets.find(a => {
           const n = (a.name || "").toLowerCase();
@@ -678,21 +688,31 @@ app.whenReady().then(async () => {
 
         let extracted = false;
         try {
-          execSync(`tar -xf "${tempDownloadPath}" -C "${updateDir}" resources/app.asar`, { timeout: 30000 });
-          const extractedAsar = path.join(updateDir, "resources", "app.asar");
-          if (fs.existsSync(extractedAsar)) {
+          execSync(`tar -xf "${tempDownloadPath}" -C "${updateDir}"`, { timeout: 30000 });
+          const directAsar = path.join(updateDir, "app.asar");
+          const nestedAsar = path.join(updateDir, "resources", "app.asar");
+          if (fs.existsSync(directAsar)) {
             if (fs.existsSync(stagedAsarPath)) fs.unlinkSync(stagedAsarPath);
-            fs.renameSync(extractedAsar, stagedAsarPath);
+            fs.renameSync(directAsar, stagedAsarPath);
+            extracted = true;
+          } else if (fs.existsSync(nestedAsar)) {
+            if (fs.existsSync(stagedAsarPath)) fs.unlinkSync(stagedAsarPath);
+            fs.renameSync(nestedAsar, stagedAsarPath);
             extracted = true;
           }
         } catch (tarErr) {
           try {
             const psCmd = `powershell -NoProfile -Command "Expand-Archive -LiteralPath '${tempDownloadPath}' -DestinationPath '${path.join(updateDir, 'extracted')}' -Force"`;
             execSync(psCmd, { timeout: 60000 });
-            const psAsar = path.join(updateDir, "extracted", "resources", "app.asar");
-            if (fs.existsSync(psAsar)) {
+            const psDirect = path.join(updateDir, "extracted", "app.asar");
+            const psNested = path.join(updateDir, "extracted", "resources", "app.asar");
+            if (fs.existsSync(psDirect)) {
               if (fs.existsSync(stagedAsarPath)) fs.unlinkSync(stagedAsarPath);
-              fs.renameSync(psAsar, stagedAsarPath);
+              fs.renameSync(psDirect, stagedAsarPath);
+              extracted = true;
+            } else if (fs.existsSync(psNested)) {
+              if (fs.existsSync(stagedAsarPath)) fs.unlinkSync(stagedAsarPath);
+              fs.renameSync(psNested, stagedAsarPath);
               extracted = true;
             }
           } catch (psErr) {}

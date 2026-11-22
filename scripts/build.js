@@ -28,7 +28,13 @@ fs.mkdirSync(stagingDir, { recursive: true });
 // Copy source files
 const entries = fs.readdirSync(sourceDir);
 const exclude = new Set(['.git', '.github', 'screenshots', 'dist', 'node_modules', 'node_modules.zip', 'scripts']);
-const devDeps = new Set(['app-builder-bin', 'typescript', '7zip-bin', '@esbuild', 'esbuild', 'electron', 'electron-builder', '.package-lock.json', '.cache']);
+const devDeps = new Set([
+  'app-builder-bin', 'typescript', '7zip-bin', '@esbuild', 'esbuild',
+  'electron', 'electron-builder', '.package-lock.json', '.cache',
+  '@electron', '@electron-internal', 'postject', 'app-builder-lib',
+  '@types', 'node-gyp', '@pixi', 'builder-util', 'builder-util-runtime',
+  'dmg-builder', 'temp-file', 'lazy-val'
+]);
 
 for (const entry of entries) {
   if (exclude.has(entry)) continue;
@@ -75,6 +81,15 @@ if (fs.existsSync(sevenZipPath)) {
   const zipSize = fs.statSync(zipPath).size;
   console.log('📦 Zip package size:', (zipSize / (1024 * 1024)).toFixed(2), 'MB');
   console.log('📍 Zip saved to:', zipPath);
+
+  // 6. Create lightweight in-app update package (app-update.zip)
+  const updateZipPath = path.join(distBase, 'app-update.zip');
+  console.log('6. Creating ultra-lightweight in-app update package (app-update.zip)...');
+  if (fs.existsSync(updateZipPath)) fs.unlinkSync(updateZipPath);
+  execSync(`"${sevenZipPath}" a -tzip -mx=9 "${updateZipPath}" "${standaloneAsar}"`, { stdio: 'inherit' });
+  const updateZipSize = fs.statSync(updateZipPath).size;
+  console.log('⚡ app-update.zip size:', (updateZipSize / (1024 * 1024)).toFixed(2), 'MB');
+  console.log('📍 Update zip saved to:', updateZipPath);
 }
 
 console.log(`\n🎉 Build complete for v${version}!`);
