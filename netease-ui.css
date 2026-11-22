@@ -31,6 +31,7 @@
   color: #fff;
   font-size: 13px;
   user-select: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 /* ===== 通用按钮 ===== */
@@ -69,7 +70,7 @@ body { user-select: none; -webkit-user-select: none; }
   box-shadow: 0 16px 42px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   color: #ececf3;
   font: 12px "Segoe UI", sans-serif;
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 .transport, .transport-timeline, .transport-volume { display: flex; align-items: center; gap: 8px; }
 .transport { gap: 4px; }
@@ -1065,7 +1066,7 @@ body.ncm-drawer-open #ncm-topbar {
   border-radius: 50%;
   cursor: pointer;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  transition: all 0.2s ease;
+  transition: opacity 0.3s ease, transform 0.25s ease, background 0.2s, border-color 0.2s;
 }
 #ncm-show-controls:hover {
   background: rgba(255, 77, 109, 0.85);
@@ -1644,7 +1645,7 @@ body.ncm-topbar-hidden #ncm-topbar {
   color: #fff;
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  transition: transform 0.25s ease, background 0.2s, border-color 0.2s;
+  transition: opacity 0.3s ease, transform 0.25s ease, background 0.2s, border-color 0.2s;
 }
 
 #ncm-topbar-show[hidden] {
@@ -1669,6 +1670,31 @@ body.ncm-topbar-hidden #ncm-topbar {
 #ncm-topbar-hide:hover {
   opacity: 1;
   background: rgba(255, 255, 255, 0.22);
+}
+
+/* ===== 闲置无交互时菜单栏与折叠按钮自动平滑隐藏 ===== */
+body.ui-idle #ncm-controls {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(16px);
+}
+
+body.ui-idle #ncm-show-controls {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.85);
+}
+
+body.ui-idle #ncm-topbar {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-16px);
+}
+
+body.ui-idle #ncm-topbar-show {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.85);
 }
 
 /* ===== 聚焦模式左侧专属进度条 ===== */

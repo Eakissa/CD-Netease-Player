@@ -1795,16 +1795,18 @@ function setDrawerOpen(open) {
   drawer.inert = !open;
   drawerBackdrop.hidden = !open;
   document.body.classList.toggle("ncm-drawer-open", open);
-  drawerToggle.setAttribute("aria-expanded", String(open));
+  drawerToggle?.setAttribute("aria-expanded", String(open));
   if (open) {
     drawerClose.focus({ preventScroll: true });
     activeTrackButton?.scrollIntoView({ block: "nearest" });
   } else {
-    drawerToggle.focus({ preventScroll: true });
+    drawerToggle?.focus({ preventScroll: true });
   }
 }
 
-drawerToggle.onclick = () => setDrawerOpen(drawer.inert);
+if (drawerToggle) {
+  drawerToggle.onclick = () => setDrawerOpen(drawer.inert);
+}
 drawerClose.onclick = drawerBackdrop.onclick = () => setDrawerOpen(false);
 
 $("ncm-playlist-select").onchange = (e) => {
@@ -3083,6 +3085,47 @@ if (localStorage.getItem("ncm_topbar_hidden") === "true") {
       hasMovedHorizontally = false;
     }, 60);
   });
+})();
+
+// ===== 14. 菜单栏与折叠按钮无交互闲置时自动平滑隐藏 =====
+(function initIdleUiAutoFade() {
+  let uiIdleTimer = null;
+  let isPointerDown = false;
+
+  function resetIdle() {
+    document.body.classList.remove("ui-idle");
+    clearTimeout(uiIdleTimer);
+
+    // 检查是否有弹窗、抽屉打开，或用户正在按住拖拽/输入
+    const isModalOpen = !!document.querySelector("dialog[open], #ncm-drawer:not(.closed), #ncm-qr-modal:not(.hidden)");
+    const isTyping = document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName);
+    if (isModalOpen || isPointerDown || isTyping) {
+      return;
+    }
+
+    uiIdleTimer = setTimeout(() => {
+      const stillModalOpen = !!document.querySelector("dialog[open], #ncm-drawer:not(.closed), #ncm-qr-modal:not(.hidden)");
+      const stillTyping = document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName);
+      if (!stillModalOpen && !isPointerDown && !stillTyping) {
+        document.body.classList.add("ui-idle");
+      }
+    }, 2800);
+  }
+
+  window.addEventListener("mousemove", resetIdle, { passive: true });
+  window.addEventListener("mousedown", () => {
+    isPointerDown = true;
+    resetIdle();
+  }, { passive: true });
+  window.addEventListener("mouseup", () => {
+    isPointerDown = false;
+    resetIdle();
+  }, { passive: true });
+  window.addEventListener("keydown", resetIdle, { passive: true });
+  window.addEventListener("wheel", resetIdle, { passive: true });
+  window.addEventListener("touchstart", resetIdle, { passive: true });
+
+  resetIdle();
 })();
 
 console.log("[NCM Player] 网易云播放器初始化完成 (含 AMLL 歌词引擎与 AV3A/AV3V 解码器)");
