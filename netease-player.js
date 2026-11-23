@@ -1631,31 +1631,17 @@ window.addEventListener("pointerdown", (e) => {
   queueDialog.close();
 }, true);
 
-function setControlsHidden(hidden, focus = false) {
-  const controlsEl = $("ncm-controls");
-  const showControlsEl = $("ncm-show-controls");
-  if (controlsEl) controlsEl.hidden = hidden;
-  if (showControlsEl) showControlsEl.hidden = !hidden;
-  document.body.classList.toggle("ncm-controls-hidden", hidden);
-  if (focus) {
-    if (hidden && showControlsEl) showControlsEl.focus();
-    else if (!hidden && $("ncm-hide-controls")) $("ncm-hide-controls").focus();
+// 彻底清理历史遗留的 ncm_controls_hidden 状态，确保全新拟物悬浮胶囊底栏默认正常常驻显示
+try {
+  localStorage.removeItem("ncm_controls_hidden");
+  document.body.classList.remove("ncm-controls-hidden");
+  const controlsInitEl = $("ncm-controls");
+  if (controlsInitEl) {
+    controlsInitEl.hidden = false;
+    controlsInitEl.removeAttribute("hidden");
   }
-}
-if ($("ncm-hide-controls")) {
-  $("ncm-hide-controls").onclick = () => {
-    localStorage.setItem("ncm_controls_hidden", "true");
-    setControlsHidden(true, true);
-  };
-}
-if ($("ncm-show-controls")) {
-  $("ncm-show-controls").onclick = () => {
-    localStorage.removeItem("ncm_controls_hidden");
-    setControlsHidden(false, true);
-  };
-}
-if (localStorage.getItem("ncm_controls_hidden") === "true") {
-  setControlsHidden(true);
+} catch (e) {
+  console.warn("Clean legacy controls hidden state failed:", e);
 }
 
 // ===== 4. 播放指定曲目（核心流程） =====
@@ -2407,9 +2393,13 @@ async function checkAppUpdates(silent = false) {
   }
 
   if (checkBtn) checkBtn.disabled = true;
-  if (!silent && updateStatus) {
-    updateStatus.className = "update-subtext";
-    updateStatus.textContent = "正在连接 GitHub 检测最新版本…";
+  const miscStatusEl = $("ncm-misc-update-status");
+  if (!silent) {
+    if (updateStatus) {
+      updateStatus.className = "update-subtext";
+      updateStatus.textContent = "正在连接 GitHub 检测最新版本…";
+    }
+    if (miscStatusEl) miscStatusEl.textContent = "正在连接 GitHub 检测最新版本…";
   }
 
   try {
@@ -2433,6 +2423,9 @@ async function checkAppUpdates(silent = false) {
           updateStatus.className = "update-subtext has-update";
           updateStatus.textContent = `发现新版本：${result.tagName}（${result.name}）`;
         }
+        if (miscStatusEl) {
+          miscStatusEl.textContent = `发现新版本：${result.tagName}`;
+        }
         if (openReleaseBtn) openReleaseBtn.hidden = false;
         if (updateDot) updateDot.hidden = false;
 
@@ -2445,6 +2438,9 @@ async function checkAppUpdates(silent = false) {
         if (updateStatus) {
           updateStatus.className = "update-subtext";
           updateStatus.textContent = `当前已是最新版本 (v${result.currentVersion})，无需更新。`;
+        }
+        if (miscStatusEl) {
+          miscStatusEl.textContent = `当前已是最新版本 (v${result.currentVersion})`;
         }
         if (openReleaseBtn) openReleaseBtn.hidden = true;
         if (updateDot) updateDot.hidden = true;
@@ -3643,50 +3639,72 @@ if (miscCheckUpdateBtn) {
   });
 })();
 
-// ===== 14. 底部播放控制栏位置悬浮显现交互（移至其位置才显示，离开其位置自动平滑隐藏） =====
+// ===== 14. 底部播放控制栏位置悬浮交互与常驻/自动隐藏模式 =====
 (function initHoverPositionUiController() {
   const controls = $("ncm-controls");
-  const controlsShow = $("ncm-show-controls");
+  if (!controls) return;
+
+  // 保证移除任何残留的 hidden 属性
+  controls.hidden = false;
+  controls.removeAttribute("hidden");
+
+  const dockModeSelect = $("ncm-misc-dock-select");
+  const getDockMode = () => localStorage.getItem("ncm_dock_mode") || "always";
+
+  function applyDockMode(mode) {
+    if (mode === "autohide") {
+      document.body.classList.add("controls-autohide");
+      controls.classList.remove("hover-revealed");
+    } else {
+      document.body.classList.remove("controls-autohide");
+      controls.classList.add("hover-revealed");
+    }
+  }
+
+  if (dockModeSelect) {
+    dockModeSelect.value = getDockMode();
+    dockModeSelect.onchange = (e) => {
+      const mode = e.target.value;
+      localStorage.setItem("ncm_dock_mode", mode);
+      applyDockMode(mode);
+    };
+  }
+  applyDockMode(getDockMode());
 
   let controlsHideTimer = null;
   let isPointerDown = false;
 
   function showControls() {
     clearTimeout(controlsHideTimer);
-    controls?.classList.add("hover-revealed");
-    controlsShow?.classList.add("hover-revealed");
+    controls.classList.add("hover-revealed");
   }
 
   function hideControls(delay = 240) {
+    if (!document.body.classList.contains("controls-autohide")) {
+      controls.classList.add("hover-revealed");
+      return;
+    }
     clearTimeout(controlsHideTimer);
     controlsHideTimer = setTimeout(() => {
       const isQueueOpen = $("ncm-queue") && $("ncm-queue").open;
       if (!isPointerDown && !isQueueOpen) {
-        controls?.classList.remove("hover-revealed");
-        controlsShow?.classList.remove("hover-revealed");
+        controls.classList.remove("hover-revealed");
       }
     }, delay);
   }
 
   function onPointerMove(e) {
+    if (!document.body.classList.contains("controls-autohide")) {
+      showControls();
+      return;
+    }
     const x = e.clientX;
     const y = e.clientY;
-    const winW = window.innerWidth;
     const winH = window.innerHeight;
 
-    // 判断鼠标是否在底部控制栏/底部折叠按钮的指定位置区域
-    const isControlsHidden = document.body.classList.contains("ncm-controls-hidden");
-    let isOverBottom = false;
-
-    if (!isControlsHidden && controls && !controls.hidden) {
-      const r = controls.getBoundingClientRect();
-      isOverBottom = (x >= r.left - 30 && x <= r.right + 30 && y >= r.top - 25 && y <= winH) ||
-                     (y >= winH - 85);
-    } else if (isControlsHidden && controlsShow && !controlsShow.hidden) {
-      const r = controlsShow.getBoundingClientRect();
-      isOverBottom = (x >= r.left - 25 && x <= winW && y >= r.top - 25 && y <= winH) ||
-                     (y >= winH - 75 && x >= winW - 90);
-    }
+    const r = controls.getBoundingClientRect();
+    const isOverBottom = (x >= r.left - 40 && x <= r.right + 40 && y >= r.top - 30 && y <= winH) ||
+                         (y >= winH - 90);
 
     if (isOverBottom || isPointerDown) {
       showControls();
@@ -3698,24 +3716,25 @@ if (miscCheckUpdateBtn) {
   window.addEventListener("pointermove", onPointerMove, { passive: true });
   window.addEventListener("pointerdown", (e) => {
     isPointerDown = true;
-    const target = e.target;
-    if (controls?.contains(target) || controlsShow?.contains(target)) {
+    if (controls.contains(e.target)) {
       showControls();
     }
   }, { passive: true });
 
   window.addEventListener("pointerup", () => {
     isPointerDown = false;
-    hideControls(350);
+    if (document.body.classList.contains("controls-autohide")) {
+      hideControls(350);
+    }
   }, { passive: true });
 
   window.addEventListener("mouseleave", () => {
-    if (!isPointerDown) {
+    if (!isPointerDown && document.body.classList.contains("controls-autohide")) {
       hideControls(100);
     }
   }, { passive: true });
 
-  controls?.addEventListener("focusin", showControls);
+  controls.addEventListener("focusin", showControls);
 })();
 
 console.log("[NCM Player] 网易云播放器初始化完成 (含 AMLL 歌词引擎与 AV3A/AV3V 解码器)");
