@@ -231,6 +231,7 @@ if (ctxPlayBtn) {
       const insertIdx = currentIdx >= 0 ? currentIdx + 1 : 0;
       queueTracks.splice(insertIdx, 0, song);
       rebuildQueueOrder(insertIdx);
+  savePlaybackState();
       playTrack(insertIdx);
     }
     showPlayerToast(`已加入播放列表并播放: ${song.name}`);
@@ -246,6 +247,7 @@ if (ctxPlayNextBtn) {
     const insertIdx = currentIdx >= 0 ? currentIdx + 1 : 0;
     queueTracks.splice(insertIdx, 0, song);
     rebuildQueueOrder(currentIdx);
+  savePlaybackState();
     renderQueue();
     showPlayerToast(`已添加至下一首播放: ${song.name}`);
   };
@@ -494,6 +496,7 @@ function renderPlaylistAccordion() {
           ? Math.floor(Math.random() * songs.length)
           : 0;
         rebuildQueueOrder(startIdx);
+  savePlaybackState();
         playTrack(startIdx);
         showPlayerToast(`已开始播放歌单: ${pl.name} (${songs.length} 首)`);
 
@@ -582,6 +585,7 @@ function renderPlaylistAccordion() {
                   queueTracks = loadedSongs;
                   queueName = pl.name;
                   rebuildQueueOrder(sIdx);
+  savePlaybackState();
                   playTrack(sIdx);
                 });
                 frag.appendChild(row);
@@ -766,6 +770,7 @@ function createMiniCDCase(album, { showQuickPlay = true } = {}) {
           ? Math.floor(Math.random() * songs.length)
           : 0;
         rebuildQueueOrder(startIdx);
+  savePlaybackState();
         playTrack(startIdx);
         showPlayerToast(`已开始播放专辑: ${album.name} (${songs.length} 首)`);
       } catch (err) {
@@ -934,6 +939,7 @@ async function openAlbumDetail(album, source = null) {
           ? Math.floor(Math.random() * songs.length)
           : 0;
         rebuildQueueOrder(startIdx);
+  savePlaybackState();
         playTrack(startIdx);
         showPlayerToast(`已开始播放专辑: ${album.name}`);
       };
@@ -945,6 +951,7 @@ async function openAlbumDetail(album, source = null) {
         const insertIdx = currentIdx >= 0 ? currentIdx + 1 : 0;
         queueTracks.splice(insertIdx, 0, ...songs);
         rebuildQueueOrder(currentIdx);
+  savePlaybackState();
         renderQueue();
         showPlayerToast(`已将 ${songs.length} 首曲目加入播放列表`);
       };
@@ -962,6 +969,7 @@ async function openAlbumDetail(album, source = null) {
           queueTracks = songs;
           queueName = album.name;
           rebuildQueueOrder(sIdx);
+  savePlaybackState();
           playTrack(sIdx);
         });
         albumDetailTrackList.appendChild(row);
@@ -1157,6 +1165,7 @@ async function openArtistDetail(artistId, artistName) {
             queueTracks = hotSongs;
             queueName = `${artistInfo.name || artistName} - 热门曲目`;
             rebuildQueueOrder(sIdx);
+  savePlaybackState();
             playTrack(sIdx);
           });
           artistSongsList.appendChild(row);
@@ -1175,6 +1184,7 @@ async function openArtistDetail(artistId, artistName) {
           ? Math.floor(Math.random() * hotSongs.length)
           : 0;
         rebuildQueueOrder(startIdx);
+  savePlaybackState();
         playTrack(startIdx);
         showPlayerToast(`已开始播放歌手热门单曲 (${hotSongs.length} 首)`);
       };
@@ -1273,6 +1283,7 @@ function performDrawerSearch(keyword) {
         const nextIdx = currentIdx >= 0 ? currentIdx + 1 : 0;
         queueTracks.splice(nextIdx, 0, targetSong);
         rebuildQueueOrder(nextIdx);
+  savePlaybackState();
         playTrack(nextIdx);
       }
       showPlayerToast(`已加入播放列表并播放: ${targetSong.name}`);
@@ -1481,6 +1492,7 @@ trackList.addEventListener("click", event => {
     queueName = $("ncm-playlist-select").selectedOptions[0]?.textContent.replace(/ ?\(\d+\)$/, "") || "";
     currentIdx = -1;
     rebuildQueueOrder(index);
+  savePlaybackState();
   }
   playTrack(index);
 });
@@ -1537,6 +1549,7 @@ function updateOrderButtonUI(mode, showToast = false) {
 orderControl.onchange = () => {
   localStorage.setItem("ncm_order", orderControl.value);
   rebuildQueueOrder(currentIdx);
+  savePlaybackState();
   updateOrderButtonUI(orderControl.value, false);
 };
 
@@ -1548,6 +1561,7 @@ if (orderBtn) {
     orderControl.value = nextMode;
     localStorage.setItem("ncm_order", nextMode);
     rebuildQueueOrder(currentIdx);
+  savePlaybackState();
     updateOrderButtonUI(nextMode, true);
   };
 }
@@ -2000,6 +2014,92 @@ function updateFocusCover(song) {
 let playbackLookup;
 let sourceReady = false;
 let pendingPlayback = null;
+
+// ==============================================================
+// 播放记忆系统：保存并在应用启动时恢复上次播放列表和曲目（不自动播放）
+// ==============================================================
+let savePlaybackTimer = null;
+function savePlaybackState() {
+  clearTimeout(savePlaybackTimer);
+  savePlaybackTimer = setTimeout(() => {
+    try {
+      if (!queueTracks || !queueTracks.length) {
+        localStorage.removeItem("ncm_last_playback_state");
+        return;
+      }
+      const simplifiedTracks = queueTracks.slice(0, 500).map(s => ({
+        id: s.id,
+        name: s.name,
+        ar: (s.ar || []).map(a => ({ id: a.id, name: a.name })),
+        al: s.al ? { id: s.al.id, name: s.al.name, picUrl: s.al.picUrl } : undefined,
+        dt: s.dt
+      }));
+      const state = {
+        tracks: simplifiedTracks,
+        queueName: queueName || "",
+        currentIdx: Math.max(0, Math.min(currentIdx, simplifiedTracks.length - 1)),
+        queueOrder: queueOrder && queueOrder.length === queueTracks.length ? queueOrder : simplifiedTracks.map((_, i) => i),
+        savedAt: Date.now()
+      };
+      localStorage.setItem("ncm_last_playback_state", JSON.stringify(state));
+    } catch (e) {
+      console.warn("[NCM] 保存播放记忆失败:", e);
+    }
+  }, 400);
+}
+
+function restorePlaybackState() {
+  try {
+    const raw = localStorage.getItem("ncm_last_playback_state");
+    if (!raw) return;
+    const state = JSON.parse(raw);
+    if (!state || !Array.isArray(state.tracks) || !state.tracks.length) return;
+
+    queueTracks = state.tracks;
+    tracks = state.tracks;
+    queueName = state.queueName || "";
+    currentIdx = state.currentIdx >= 0 && state.currentIdx < queueTracks.length ? state.currentIdx : 0;
+    queueOrder = Array.isArray(state.queueOrder) && state.queueOrder.length === queueTracks.length
+      ? state.queueOrder
+      : queueTracks.map((_, i) => i);
+
+    const song = queueTracks[currentIdx];
+    if (!song) return;
+
+    // 1. 刷新队列面板
+    renderQueue();
+    updateActiveTrack();
+
+    // 2. 刷新底部胶囊栏与聚焦模式的封面与元数据预览
+    updateFocusCover(song);
+
+    // 3. 刷新 3D CD 唱片机与左侧曲目列和背景 (保持暂停待命，绝不自动起播)
+    const artist = (song.ar || []).map(a => a.name).join(" / ");
+    const albumTitle = song.al?.name || song.name;
+    const coverUrl = song.al?.picUrl ? `${song.al.picUrl}?param=800y800` : "";
+
+    window.CDCaseBridge?.updateTrack({ title: song.name, artist, albumTitle, coverUrl });
+    extractAndApplyDualAccents(coverUrl);
+
+    // 4. 预取动态歌词（进入聚焦模式即可立即呈现，不发出音频请求）
+    requestFullLyrics(song.id).then(lyricsData => {
+      if (lyricsData && currentIdx === state.currentIdx) {
+        window.AMLLPlayer?.setLyrics(lyricsData);
+      }
+    }).catch(() => {});
+
+    // 5. 确保音频保持暂停与初始待命状态，绝不自动起播
+    sourceReady = false;
+    audio.pause();
+    setPlayingAppearance(false);
+    window.CDCaseBridge?.setPlaybackState(false);
+    setPlayerStatus("已恢复上次播放列表 (按空格或点击播放)");
+    console.log(`[NCM] 成功恢复记忆播放列表: ${queueTracks.length} 首歌曲，当前停留在第 ${currentIdx + 1} 首: ${song.name}`);
+  } catch (e) {
+    console.warn("[NCM] 恢复记忆播放状态失败:", e);
+  }
+}
+
 async function playTrack(idx) {
   if (idx < 0 || idx >= queueTracks.length) return;
   playbackLookup?.abort();
@@ -2008,6 +2108,7 @@ async function playTrack(idx) {
   const { signal } = controller;
   currentIdx = idx;
   updateActiveTrack();
+  savePlaybackState();
 
   sourceReady = false;
   pendingPlayback = null;
@@ -2791,6 +2892,7 @@ $("ncm-logout").onclick = async () => {
   lyrics = [];
   currentIdx = -1;
   rebuildQueueOrder(-1);
+  savePlaybackState();
   renderTracks();
   const placeholder = document.createElement("option");
   placeholder.value = "";
@@ -3069,13 +3171,19 @@ function applyDualAccentColors(rgb1, rgb2) {
   const c1 = `rgb(${rgb1[0]}, ${rgb1[1]}, ${rgb1[2]})`;
   const c1Dark = `rgb(${Math.round(rgb1[0] * 0.65)}, ${Math.round(rgb1[1] * 0.65)}, ${Math.round(rgb1[2] * 0.65)})`;
   const c2 = `rgb(${rgb2[0]}, ${rgb2[1]}, ${rgb2[2]})`;
-  const c2Dark = `rgb(${Math.round(rgb2[0] * 0.60)}, ${Math.round(rgb2[1] * 0.60)}, ${Math.round(rgb2[2] * 0.60)})`;
+  const c2Dark = `rgb(${Math.round(rgb2[0] * 0.60)}, ${Math.round(rgb2[0] * 0.60)}, ${Math.round(rgb2[0] * 0.60)})`;
 
   root.style.setProperty("--bg-accent-1", c1);
   root.style.setProperty("--bg-accent-1-dark", c1Dark);
   root.style.setProperty("--bg-accent-2", c2);
   root.style.setProperty("--bg-accent-2-dark", c2Dark);
   root.style.setProperty("--accent-color-rgb", `${rgb1[0]}, ${rgb1[1]}, ${rgb1[2]}`);
+
+  // 同步覆盖底层 --accent 与 --accent-dark，彻底杜绝外部组件对黑白/灰蓝专辑暴力渲染艳紫
+  root.style.setProperty("--accent", c1);
+  root.style.setProperty("--accent-dark", c1Dark);
+  root.style.setProperty("--accent-soft", `rgba(${rgb1[0]}, ${rgb1[1]}, ${rgb1[2]}, 0.4)`);
+  root.style.setProperty("--accent-glow", `rgba(${rgb1[0]}, ${rgb1[1]}, ${rgb1[2]}, 0.25)`);
 }
 
 let colorExtractionGen = 0;
@@ -3111,7 +3219,11 @@ function extractAndApplyDualAccents(coverUrl) {
       ctx.drawImage(img, 0, 0, size, size);
       const imgData = ctx.getImageData(0, 0, size, size).data;
 
-      const colorList = [];
+      let sumR = 0, sumG = 0, sumB = 0, sumS = 0;
+      let validCount = 0;
+      const buckets = Array.from({ length: 12 }, () => []);
+      let chromaticPixels = 0;
+
       for (let i = 0; i < imgData.length; i += 4) {
         const r = imgData[i];
         const g = imgData[i + 1];
@@ -3119,66 +3231,86 @@ function extractAndApplyDualAccents(coverUrl) {
         const a = imgData[i + 3];
         if (a < 128) continue;
         const [h, s, l] = rgbToHsl(r, g, b);
-        // 过滤近黑和近白高光
-        if (l < 0.12 || l > 0.90) continue;
-        colorList.push({ r, g, b, h, s, l });
+        // 排除绝对死黑和纯白
+        if (l < 0.08 || l > 0.94) continue;
+        sumR += r; sumG += g; sumB += b; sumS += s;
+        validCount++;
+
+        // 仅在饱和度达到真实色彩阈值 (>= 0.16) 时才按色相归桶，过滤黑白/灰蓝背景中的压缩紫噪点
+        if (s >= 0.16 && l >= 0.12 && l <= 0.88) {
+          const bucketIdx = Math.floor(h / 30) % 12;
+          buckets[bucketIdx].push({ r, g, b, h, s, l });
+          chromaticPixels++;
+        }
       }
 
-      if (!colorList.length) {
-        dualAccentsCache.set(coverUrl, DEFAULT_DUAL_ACCENTS);
+      if (validCount === 0) {
+        applyDualAccentColors(DEFAULT_DUAL_ACCENTS[0], DEFAULT_DUAL_ACCENTS[1]);
+        return;
+      }
+
+      const avgSaturation = sumS / validCount;
+      const avgR = Math.round(sumR / validCount);
+      const avgG = Math.round(sumG / validCount);
+      const avgB = Math.round(sumB / validCount);
+
+      // 【核心防偏色防护】：如果整张专辑全局饱和度很低 (< 0.14) 或鲜艳像素极少 (< 8%)
+      // 认定为黑白 / 灰阶 / 冷调石板蓝专辑，忠实呈现高级冷灰蓝/石膏深炭色，绝对不向紫色漂移！
+      if (avgSaturation < 0.14 || chromaticPixels < validCount * 0.08) {
+        const [hAvg, sAvg, lAvg] = rgbToHsl(avgR, avgG, avgB);
+        // 提取封面的真实原生灰度/冷调
+        const targetL1 = Math.max(0.24, Math.min(0.42, lAvg * 0.65));
+        const targetL2 = Math.max(0.12, Math.min(0.22, lAvg * 0.35));
+        const res1 = hslToRgb(hAvg, Math.min(sAvg, 0.12), targetL1);
+        const res2 = hslToRgb(hAvg, Math.min(sAvg, 0.10), targetL2);
+
+        dualAccentsCache.set(coverUrl, [res1, res2]);
         if (currentGen === colorExtractionGen) {
-          applyDualAccentColors(DEFAULT_DUAL_ACCENTS[0], DEFAULT_DUAL_ACCENTS[1]);
+          applyDualAccentColors(res1, res2);
         }
         return;
       }
 
-      // 将颜色按色相分 12 桶 (每桶 30°)
-      const buckets = Array.from({ length: 12 }, () => []);
-      for (const c of colorList) {
-        const bucketIdx = Math.floor(c.h / 30) % 12;
-        buckets[bucketIdx].push(c);
-      }
-
+      // 彩色专辑：按真实色相桶打分排序
       const scoredBuckets = buckets.map((bucket, idx) => {
         if (!bucket.length) return null;
-        let sumR = 0, sumG = 0, sumB = 0, sumS = 0;
+        let bR = 0, bG = 0, bB = 0, bS = 0;
         for (const c of bucket) {
-          sumR += c.r; sumG += c.g; sumB += c.b; sumS += c.s;
+          bR += c.r; bG += c.g; bB += c.b; bS += c.s;
         }
         const count = bucket.length;
-        const avgS = sumS / count;
-        const score = count * (0.35 + avgS * 0.65);
+        const avgBucketS = bS / count;
+        // 只有像素数量达到一定体量才具备代表性
+        if (count < validCount * 0.03) return null;
+        const score = count * (0.35 + avgBucketS * 0.65);
         return {
           idx,
-          r: Math.round(sumR / count),
-          g: Math.round(sumG / count),
-          b: Math.round(sumB / count),
+          r: Math.round(bR / count),
+          g: Math.round(bG / count),
+          b: Math.round(bB / count),
           h: (idx * 30 + 15),
           score,
         };
       }).filter(Boolean).sort((a, b) => b.score - a.score);
 
-      const color1 = scoredBuckets[0] || { r: 180, g: 60, b: 90, h: 330 };
+      const color1 = scoredBuckets[0] || { r: avgR, g: avgG, b: avgB, h: 210 };
       let color2 = null;
 
-      // 寻找第二特征色：要求环形色相差 >= 45° 且 RGB 欧氏距离 >= 65，确保绝不选用相同或相近颜色
       for (let i = 1; i < scoredBuckets.length; i++) {
         const candidate = scoredBuckets[i];
         const hueDiff = Math.abs(candidate.h - color1.h);
         const circularHueDiff = Math.min(hueDiff, 360 - hueDiff);
         const rgbDist = Math.hypot(candidate.r - color1.r, candidate.g - color1.g, candidate.b - color1.b);
-        if (circularHueDiff >= 45 && rgbDist >= 65) {
+        if (circularHueDiff >= 45 && rgbDist >= 60) {
           color2 = candidate;
           break;
         }
       }
 
-      // 封面为纯单色时：基于首选特征色智能生成对立互补或三分对立高辨识色相 (+85°)
       if (!color2) {
         const [h1, s1, l1] = rgbToHsl(color1.r, color1.g, color1.b);
-        const h2 = (h1 + 85) % 360;
-        const [r2, g2, b2] = hslToRgb(h2, Math.max(0.48, s1), Math.max(0.38, Math.min(0.62, l1)));
-        color2 = { r: r2, g: g2, b: b2, h: h2 };
+        const [r2, g2, b2] = hslToRgb(h1, s1 * 0.85, Math.max(0.18, l1 * 0.65));
+        color2 = { r: r2, g: g2, b: b2, h: h1 };
       }
 
       const res1 = [color1.r, color1.g, color1.b];
@@ -3195,12 +3327,12 @@ function extractAndApplyDualAccents(coverUrl) {
     }
   };
 }
-
 let bgColorMode = localStorage.getItem("ncm_bg_color_mode") || "default";
 function applyBgColorMode(mode) {
   bgColorMode = mode;
   localStorage.setItem("ncm_bg_color_mode", mode);
   document.body.classList.toggle("bg-dual-accent", mode === "dual-accent");
+  document.body.classList.toggle("bg-monochrome", mode === "monochrome");
 }
 applyBgColorMode(bgColorMode);
 
@@ -3209,7 +3341,11 @@ if (bgModeSelect) {
   bgModeSelect.value = bgColorMode;
   bgModeSelect.onchange = () => {
     applyBgColorMode(bgModeSelect.value);
-    showPlayerToast(bgModeSelect.value === "dual-accent" ? "已启用双特征色背景" : "已切换为经典两分背景");
+    showPlayerToast(
+      bgModeSelect.value === "dual-accent" ? "已启用双特征色流光背景" :
+      bgModeSelect.value === "monochrome" ? "已启用沉浸极简灰阶背景" :
+      "已切换为经典两分背景"
+    );
   };
 }
 
@@ -3737,5 +3873,6 @@ if (miscCheckUpdateBtn) {
   controls.addEventListener("focusin", showControls);
 })();
 
+setTimeout(restorePlaybackState, 350);
 console.log("[NCM Player] 网易云播放器初始化完成 (含 AMLL 歌词引擎与 AV3A/AV3V 解码器)");
 console.log("[NCM Player] 快捷键：空格=播放暂停 | Shift+← →=切曲 | ← →=快退快进5s | ↑↓=音量");

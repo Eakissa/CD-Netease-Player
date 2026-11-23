@@ -1861,6 +1861,13 @@ body.ncm-drawer-open #ncm-right-glass-strip {
 #footer {
   left: 28vw;
   transform: translateX(-50%);
+  bottom: calc(22px + 60px + 20px) !important; /* 102px：彻底避免被底部 60px 悬浮播控胶囊条遮挡，留出充裕呼吸间距 */
+  z-index: 10;
+  pointer-events: none;
+}
+
+#tracklist {
+  max-height: calc(100vh - 102px - 28px - 18vh);
 }
 
 /* 频谱动效：置于 CD 盒与歌词区域交界处 */
@@ -2616,6 +2623,14 @@ body.lyrics-focus-mode .desktop-titlebar:hover .desktop-record {
 }
 
 /* ===== 双特征色背景模式 (特征色1 + 特征色2) ===== */
+/* 默认两分模式：右侧对角线强制接入原生智能特征色，杜绝旧算法的偏色艳紫 */
+#bg .right {
+  clip-path: polygon(calc(40% + var(--split-shift, 0%)) 0, 100% 0, 100% 100%, calc(72% + var(--split-shift, 0%)) 100%);
+  background:
+    radial-gradient(ellipse 50% 70% at 70% 45%, rgba(255, 255, 255, 0.16), transparent 70%),
+    linear-gradient(160deg, var(--bg-accent-1, var(--accent)) 0%, var(--bg-accent-1-dark, var(--accent-dark)) 100%) !important;
+}
+
 body.bg-dual-accent #bg .left {
   background:
     radial-gradient(ellipse 60% 80% at 30% 40%, rgba(255, 255, 255, 0.18), transparent 70%),
@@ -2630,6 +2645,23 @@ body.bg-dual-accent #bg .right {
 body.bg-dual-accent #left #title {
   color: #ffffff !important;
   text-shadow: 0 0.3vh 1.6vh rgba(0, 0, 0, 0.55), 0 0 24px var(--accent-glow) !important;
+}
+
+/* 极简灰阶模式 (Monochrome) */
+body.bg-monochrome #bg .left {
+  background:
+    radial-gradient(ellipse 60% 80% at 30% 40%, rgba(255, 255, 255, 0.10), transparent 70%),
+    linear-gradient(150deg, #2b303a 0%, #1a1e25 100%) !important;
+}
+body.bg-monochrome #bg .right {
+  clip-path: polygon(calc(40% + var(--split-shift, 0%)) 0, 100% 0, 100% 100%, calc(72% + var(--split-shift, 0%)) 100%);
+  background:
+    radial-gradient(ellipse 50% 70% at 70% 45%, rgba(255, 255, 255, 0.08), transparent 70%),
+    linear-gradient(160deg, #151820 0%, #0d0f14 100%) !important;
+}
+body.bg-monochrome #left #title {
+  color: #ffffff !important;
+  text-shadow: 0 0.3vh 1.6vh rgba(0, 0, 0, 0.65) !important;
 }
 body.bg-dual-accent #left #note {
   color: rgba(255, 255, 255, 0.9) !important;
