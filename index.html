@@ -37,25 +37,6 @@
 
   <!-- ===== 新增：网易云独立播放器 UI 层 ===== -->
 
-  <!-- 顶部右侧：登录状态与功能菜单 -->
-  <div id="ncm-topbar">
-    <span id="ncm-user">未登录</span>
-    <button id="ncm-btn-login" class="ncm-btn">扫码登录</button>
-    <button id="amll-trans-toggle" class="ncm-btn active" title="显示/隐藏翻译" type="button">译</button>
-    <button id="amll-roma-toggle" class="ncm-btn" title="显示/隐藏罗马音" type="button">音</button>
-    <button id="ncm-btn-settings" class="ncm-btn" type="button" aria-haspopup="dialog">设置<span id="ncm-update-dot" class="update-dot" hidden></span></button>
-    <button id="ncm-btn-minimize" class="ncm-btn" title="后台最小化 (托盘运行持续播放)" type="button" aria-label="后台最小化">
-      <svg viewBox="0 0 24 24" style="width:11px;height:11px;vertical-align:middle;fill:currentColor;"><path d="M5 19h14v2H5z"/></svg>
-    </button>
-    <button id="ncm-topbar-hide" class="ncm-btn" title="隐藏菜单栏 (折叠为角标)" type="button" aria-label="隐藏菜单栏">
-      <svg viewBox="0 0 24 24" style="width:11px;height:11px;vertical-align:middle;fill:currentColor;"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/></svg>
-    </button>
-  </div>
-  <!-- 顶部菜单栏折叠角标 -->
-  <button id="ncm-topbar-show" class="ncm-corner-badge" title="展开顶部菜单栏" aria-label="展开顶部菜单栏" hidden>
-    <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;"><path d="M12 16l-6-6 1.41-1.41L12 13.17l4.59-4.58L18 10z"/></svg>
-  </button>
-
   <!-- 聚焦模式左侧：Apple Music 风格大专辑封面与曲目信息 -->
   <div id="amll-focus-view" aria-hidden="true">
     <div class="amll-focus-artwork-wrap">
@@ -101,41 +82,84 @@
   <!-- 左侧磨砂玻璃质感渐变透明图层（支持按住向右滑动切换聚焦模式，点击亦可展开，聚焦模式下自动隐藏） -->
   <div id="ncm-left-glass-strip" class="ncm-left-edge-strip" title="按住向右滑动切换聚焦模式 (点击亦可切换)"></div>
 
-  <!-- 底部半透明播放控制栏 -->
-  <div id="ncm-controls">
-    <div class="transport">
-      <button id="ncm-prev" type="button" title="上一首" aria-label="上一首"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zm3 7 10-7v14z"/></svg></button>
-      <button id="ncm-play" type="button" title="播放" aria-label="播放" data-playing="false">
-        <svg class="transport-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-        <svg class="transport-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>
-      </button>
-      <button id="ncm-next" type="button" title="下一首" aria-label="下一首"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM5 5l10 7-10 7z"/></svg></button>
+  <!-- 底部悬浮胶囊拟物播放控制栏 (Floating Island Capsule) -->
+  <div id="ncm-controls" class="ncm-capsule-bar">
+    <!-- 1. 左侧：当前曲目微卡片与音质徽标 -->
+    <div class="transport-track-preview" id="ncm-track-preview" title="点击进入全屏沉浸歌词聚焦模式">
+      <div class="transport-mini-cover-wrap">
+        <img id="ncm-mini-cover" src="" alt="封面" hidden>
+        <div id="ncm-mini-cover-fallback" class="transport-mini-cover-fallback">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+        </div>
+      </div>
+      <div class="transport-track-info">
+        <div class="transport-track-title-wrap">
+          <span id="ncm-bar-title" class="transport-track-title">暂未播放</span>
+        </div>
+        <div class="transport-track-meta">
+          <span id="ncm-bar-artist" class="transport-track-artist">网易云音乐</span>
+          <span id="ncm-quality-now" class="ncm-bar-quality-pill" hidden>Hi-Res</span>
+        </div>
+      </div>
     </div>
-    <div class="transport-timeline">
-      <span id="ncm-time-cur">00:00</span>
-      <input id="ncm-progress" type="range" min="0" max="100" value="0" step="0.1" aria-label="播放进度">
-      <span id="ncm-time-tot">00:00</span>
-    </div>
-    <span id="ncm-quality-now" hidden></span>
-    <div class="transport-volume">
-      <label for="ncm-volume" title="音量"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3z"/><path d="M15 9a4 4 0 0 1 0 6m2.5-8a7 7 0 0 1 0 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></label>
-      <input id="ncm-volume" type="range" min="0" max="1" step="0.02" value="0.7" aria-label="音量">
-    </div>
-    <select id="ncm-order" aria-label="播放顺序" title="播放顺序">
-      <option value="sequential">顺序播放</option><option value="loop">列表循环</option>
-      <option value="repeat">单曲循环</option><option value="shuffle">随机播放</option>
-    </select>
-    <button type="button" id="ncm-queue-open" title="播放列表" aria-label="播放列表" aria-haspopup="dialog">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v2H4zm0 5h16v2H4zm0 5h10v2H4zm12-1v7l5-3.5z"/></svg>
-    </button>
-    <button type="button" id="ncm-hide-controls" title="隐藏播放栏" aria-label="隐藏播放栏">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 8 6 6 6-6 1.5 1.5-7.5 7.5-7.5-7.5z"/></svg>
-    </button>
-  </div>
 
-  <button type="button" id="ncm-show-controls" title="显示播放栏" aria-label="显示播放栏" aria-controls="ncm-controls" hidden>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-  </button>
+    <!-- 2. 中间：播控按键与平滑进度条 -->
+    <div class="transport-center">
+      <div class="transport-buttons">
+        <button id="ncm-prev" class="ncm-ctrl-btn" type="button" title="上一首 (← / Ctrl+←)" aria-label="上一首">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zm3 7 10-7v14z"/></svg>
+        </button>
+        <button id="ncm-play" class="ncm-ctrl-play" type="button" title="播放 / 暂停 (空格)" aria-label="播放" data-playing="false">
+          <svg class="transport-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+          <svg class="transport-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>
+        </button>
+        <button id="ncm-next" class="ncm-ctrl-btn" type="button" title="下一首 (→ / Ctrl+→)" aria-label="下一首">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM5 5l10 7-10 7z"/></svg>
+        </button>
+      </div>
+      <div class="transport-timeline">
+        <span id="ncm-time-cur" class="transport-time">00:00</span>
+        <div class="transport-progress-wrap">
+          <input id="ncm-progress" type="range" min="0" max="100" value="0" step="0.1" aria-label="播放进度">
+        </div>
+        <span id="ncm-time-tot" class="transport-time">00:00</span>
+      </div>
+    </div>
+
+    <!-- 3. 右侧：播放模式、展开式音量与队列 -->
+    <div class="transport-actions">
+      <!-- 单图标循环切换播放模式 -->
+      <button type="button" id="ncm-order-btn" class="ncm-ctrl-btn ncm-order-btn" title="播放模式: 列表循环">
+        <svg id="ncm-order-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+        </svg>
+      </button>
+      <select id="ncm-order" aria-label="播放顺序" hidden>
+        <option value="loop">列表循环</option>
+        <option value="repeat">单曲循环</option>
+        <option value="shuffle">随机播放</option>
+        <option value="sequential">顺序播放</option>
+      </select>
+
+      <!-- 悬停自动展开式音量控件 -->
+      <div class="transport-volume-capsule" id="ncm-volume-capsule" title="音量 (滚轮/上下键可调节)">
+        <button type="button" id="ncm-volume-btn" class="ncm-ctrl-btn ncm-volume-btn" aria-label="静音 / 恢复音量">
+          <svg id="ncm-volume-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 9h4l5-4v14l-5-4H3z"/>
+            <path class="volume-waves" d="M15 9a4 4 0 0 1 0 6m2.5-8a7 7 0 0 1 0 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <div class="transport-volume-slider-wrap">
+          <input id="ncm-volume" type="range" min="0" max="1" step="0.02" value="0.7" aria-label="音量">
+        </div>
+      </div>
+
+      <!-- 播放列表按钮 -->
+      <button type="button" id="ncm-queue-open" class="ncm-ctrl-btn ncm-queue-btn" title="当前播放列表" aria-label="播放列表" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v2H4zm0 5h16v2H4zm0 5h10v2H4zm12-1v7l5-3.5z"/></svg>
+      </button>
+    </div>
+  </div>
 
   <!-- 快捷键调节音量浮动指示 (Volume HUD Toast) -->
   <div id="ncm-volume-toast" class="volume-toast" hidden>
@@ -158,6 +182,7 @@
       <div class="ncm-drawer-tabs" role="tablist">
         <button id="ncm-tab-playlists" class="ncm-drawer-tab active" role="tab" aria-selected="true">我的歌单</button>
         <button id="ncm-tab-albums" class="ncm-drawer-tab" role="tab" aria-selected="false">收藏专辑</button>
+        <button id="ncm-tab-misc" class="ncm-drawer-tab" role="tab" aria-selected="false">杂项<span id="ncm-update-dot" class="update-dot" hidden></span></button>
       </div>
       <button id="ncm-drawer-close" type="button" title="关闭歌单 (Esc)" aria-label="关闭歌单">✕</button>
     </div>
@@ -263,6 +288,140 @@
         <div class="ncm-album-detail-list-wrap">
           <ul id="ncm-artist-songs-list" class="ncm-track-list"></ul>
         </div>
+      </div>
+    </div>
+
+    <!-- 视图 6：杂项设置中心 -->
+    <div id="ncm-misc-view" class="ncm-drawer-view" hidden>
+      <div class="ncm-misc-container">
+
+        <!-- 1. 网易云账号卡片 -->
+        <div class="ncm-misc-card ncm-misc-user-card">
+          <div class="ncm-misc-user-main">
+            <div class="ncm-misc-avatar-wrap">
+              <img id="ncm-misc-avatar" src="" alt="用户头像" hidden />
+              <div id="ncm-misc-avatar-fallback" class="ncm-misc-avatar-fallback">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+              </div>
+            </div>
+            <div class="ncm-misc-user-meta">
+              <div class="ncm-misc-user-row">
+                <span id="ncm-user" class="ncm-misc-username">未登录</span>
+                <span id="ncm-misc-vip-badge" class="ncm-misc-vip-badge" hidden>VIP</span>
+              </div>
+              <p id="ncm-misc-user-desc" class="ncm-misc-user-desc">登录后可同步你的歌单与收藏专辑</p>
+            </div>
+          </div>
+          <div class="ncm-misc-user-actions">
+            <button id="ncm-btn-login" class="ncm-btn ncm-btn-primary" type="button">扫码登录</button>
+            <button id="ncm-misc-logout" class="ncm-btn ncm-btn-ghost-danger" type="button" hidden>退出登录</button>
+          </div>
+        </div>
+
+        <!-- 2. 歌词显示与辅助 -->
+        <div class="ncm-misc-card">
+          <h4 class="ncm-misc-card-title">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+            <span>歌词辅助与注音</span>
+          </h4>
+          <div class="ncm-misc-row">
+            <div class="ncm-misc-row-info">
+              <span class="ncm-misc-row-label">歌词中文翻译</span>
+              <span class="ncm-misc-row-sub">在外语歌词下方同步显示官方中文翻译</span>
+            </div>
+            <button id="amll-trans-toggle" class="ncm-misc-switch-btn active" type="button" title="切换歌词翻译">
+              <span class="switch-badge">译</span>
+              <span class="switch-text">已开启</span>
+            </button>
+          </div>
+          <div class="ncm-misc-row">
+            <div class="ncm-misc-row-info">
+              <span class="ncm-misc-row-label">罗马音注音标注</span>
+              <span class="ncm-misc-row-sub">在日语、韩语等歌词上方标注发音罗马音</span>
+            </div>
+            <button id="amll-roma-toggle" class="ncm-misc-switch-btn" type="button" title="切换罗马音">
+              <span class="switch-badge">音</span>
+              <span class="switch-text">已关闭</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. 音质与视效偏好 -->
+        <div class="ncm-misc-card">
+          <h4 class="ncm-misc-card-title">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.64 10.56 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z"/></svg>
+            <span>播放与视效偏好</span>
+          </h4>
+          <div class="ncm-misc-row">
+            <div class="ncm-misc-row-info">
+              <span class="ncm-misc-row-label">默认播放音质</span>
+              <span class="ncm-misc-row-sub">优先获取无损、Hi-Res 或全景声母带</span>
+            </div>
+            <select id="ncm-misc-quality-select" class="ncm-misc-select" aria-label="默认播放音质">
+              <option value="highest" selected>默认最高音质</option>
+              <option value="standard">标准</option>
+              <option value="higher">较高</option>
+              <option value="exhigh">极高</option>
+              <option value="lossless">无损</option>
+              <option value="hires">Hi-Res</option>
+              <option value="jyeffect">高清环绕声</option>
+              <option value="vivid">臻品全景声</option>
+              <option value="sky">沉浸环绕声</option>
+              <option value="jymaster">超清母带</option>
+            </select>
+          </div>
+          <div class="ncm-misc-row">
+            <div class="ncm-misc-row-info">
+              <span class="ncm-misc-row-label">3D 唱片机背景配色</span>
+              <span class="ncm-misc-row-sub">两分色背景风格呈现方式</span>
+            </div>
+            <select id="ncm-misc-bg-select" class="ncm-misc-select" aria-label="背景配色风格">
+              <option value="default" selected>经典两分 (白色 + 封面特征色)</option>
+              <option value="dual-accent">双特征色 (特征色1 + 特征色2)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 4. 系统与控制 -->
+        <div class="ncm-misc-card">
+          <h4 class="ncm-misc-card-title">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+            <span>系统与窗口</span>
+          </h4>
+          <div class="ncm-misc-actions-grid">
+            <button id="ncm-btn-minimize" class="ncm-misc-tool-btn" type="button" title="后台最小化至托盘持续播放">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19h14v2H5z"/></svg>
+              <span>最小化到托盘</span>
+            </button>
+            <button id="ncm-btn-settings" class="ncm-misc-tool-btn" type="button" aria-haspopup="dialog" title="打开高级设置">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
+              <span>高级偏好设置</span>
+            </button>
+          </div>
+          <div class="ncm-misc-row" style="margin-top: 6px;">
+            <div class="ncm-misc-row-info">
+              <span class="ncm-misc-row-label">关闭主窗口时默认操作</span>
+              <span class="ncm-misc-row-sub">点击标题栏 [×] 时的系统行为</span>
+            </div>
+            <select id="ncm-misc-close-select" class="ncm-misc-select" aria-label="关闭程序默认情况">
+              <option value="minimize">缩小到系统托盘 (后台播放)</option>
+              <option value="quit">直接退出程序</option>
+              <option value="ask">每次询问</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 5. 版本与在线更新 -->
+        <div class="ncm-misc-card">
+          <div class="ncm-misc-row">
+            <div class="ncm-misc-row-info">
+              <span id="ncm-misc-ver-label" class="ncm-misc-row-label">CD-Netease-Player v1.0.6</span>
+              <span id="ncm-misc-update-status" class="ncm-misc-row-sub">可检测 GitHub 最新版本并热更新</span>
+            </div>
+            <button id="ncm-misc-check-update-btn" class="ncm-btn" type="button">检查更新</button>
+          </div>
+        </div>
+
       </div>
     </div>
   </aside>

@@ -361,6 +361,20 @@ async function initSession() {
     $("ncm-user").textContent = profile.nickname;
     $("ncm-btn-login").textContent = "切换账号";
 
+    const miscAvatar = $("ncm-misc-avatar");
+    const miscAvatarFallback = $("ncm-misc-avatar-fallback");
+    if (miscAvatar && profile.avatarUrl) {
+      miscAvatar.src = profile.avatarUrl;
+      miscAvatar.hidden = false;
+      if (miscAvatarFallback) miscAvatarFallback.hidden = true;
+    }
+    const miscVip = $("ncm-misc-vip-badge");
+    if (miscVip) miscVip.hidden = !(profile.vipType > 0);
+    const miscUserDesc = $("ncm-misc-user-desc");
+    if (miscUserDesc) miscUserDesc.textContent = "已连接网易云音乐账号";
+    const miscLogout = $("ncm-misc-logout");
+    if (miscLogout) miscLogout.hidden = false;
+
     const plRes = await api("/user/playlist", { uid: profile.userId, limit: 100 });
     if (generation !== sessionGeneration) return;
     userPlaylists = plRes.playlist || [];
@@ -821,6 +835,8 @@ function closeArtistDetail() {
     if (searchView) searchView.hidden = false;
   } else if (previousDrawerTabOrView === "albums") {
     if (albumsView) albumsView.hidden = false;
+  } else if (previousDrawerTabOrView === "misc") {
+    if (miscView) miscView.hidden = false;
   } else {
     if (playlistsView) playlistsView.hidden = false;
   }
@@ -834,6 +850,8 @@ function closeAlbumDetail() {
     if (artistView) artistView.hidden = false;
   } else if (currentActiveDrawerTab === "playlists") {
     if (playlistsView) playlistsView.hidden = false;
+  } else if (currentActiveDrawerTab === "misc") {
+    if (miscView) miscView.hidden = false;
   } else {
     if (albumsView) albumsView.hidden = false;
   }
@@ -854,6 +872,7 @@ async function openAlbumDetail(album, source = null) {
   if (playlistsView) playlistsView.hidden = true;
   if (searchView) searchView.hidden = true;
   if (artistView) artistView.hidden = true;
+  if (miscView) miscView.hidden = true;
   albumDetailView.hidden = false;
 
   const backText = albumDetailBackBtn?.querySelector("span");
@@ -1021,6 +1040,8 @@ async function openArtistDetail(artistId, artistName) {
     previousDrawerTabOrView = "search";
   } else if (!albumsView?.hidden) {
     previousDrawerTabOrView = "albums";
+  } else if (!miscView?.hidden) {
+    previousDrawerTabOrView = "misc";
   } else {
     previousDrawerTabOrView = "playlists";
   }
@@ -1032,6 +1053,7 @@ async function openArtistDetail(artistId, artistName) {
   if (albumsView) albumsView.hidden = true;
   if (searchView) searchView.hidden = true;
   if (albumDetailView) albumDetailView.hidden = true;
+  if (miscView) miscView.hidden = true;
   if (artistView) artistView.hidden = false;
 
   switchArtistSubTab("albums");
@@ -1171,6 +1193,7 @@ const searchClearBtn = $("ncm-drawer-search-clear");
 const searchView = $("ncm-search-view");
 const playlistsView = $("ncm-playlists-view");
 const albumsView = $("ncm-albums-view");
+const miscView = $("ncm-misc-view");
 const searchSummary = $("ncm-search-summary");
 const searchTrackList = $("ncm-search-track-list");
 
@@ -1184,9 +1207,15 @@ function performDrawerSearch(keyword) {
     if (currentActiveDrawerTab === "playlists") {
       if (playlistsView) playlistsView.hidden = false;
       if (albumsView) albumsView.hidden = true;
+      if (miscView) miscView.hidden = true;
+    } else if (currentActiveDrawerTab === "misc") {
+      if (playlistsView) playlistsView.hidden = true;
+      if (albumsView) albumsView.hidden = true;
+      if (miscView) miscView.hidden = false;
     } else {
       if (playlistsView) playlistsView.hidden = true;
       if (albumsView) albumsView.hidden = false;
+      if (miscView) miscView.hidden = true;
     }
     return;
   }
@@ -1196,6 +1225,7 @@ function performDrawerSearch(keyword) {
   if (albumsView) albumsView.hidden = true;
   if (albumDetailView) albumDetailView.hidden = true;
   if (artistView) artistView.hidden = true;
+  if (miscView) miscView.hidden = true;
   if (searchView) searchView.hidden = false;
 
   // 汇集当前已加载的所有曲目（歌单缓存、专辑缓存、当前列表、播放队列）进行全文即时匹配
@@ -1264,19 +1294,54 @@ if (searchClearBtn) {
   };
 }
 
-// ===== 3.4 抽屉顶部标签切换（我的歌单 / 收藏专辑） =====
+// ===== 3.4 抽屉顶部标签切换（我的歌单 / 收藏专辑 / 杂项） =====
 const tabPlaylists = $("ncm-tab-playlists");
 const tabAlbums = $("ncm-tab-albums");
+const tabMisc = $("ncm-tab-misc");
 
-if (tabPlaylists) {
-  tabPlaylists.onclick = () => {
-    currentActiveDrawerTab = "playlists";
-    closeAlbumDetail();
-    closeArtistDetail();
-    tabPlaylists.classList.add("active");
-    tabPlaylists.setAttribute("aria-selected", "true");
+function syncMiscViewValues() {
+  const qualitySelect = $("ncm-quality");
+  const miscQuality = $("ncm-misc-quality-select");
+  if (qualitySelect && miscQuality) {
+    miscQuality.value = qualitySelect.value || "highest";
+  }
+
+  const bgSelect = $("ncm-setting-bg-mode");
+  const miscBg = $("ncm-misc-bg-select");
+  if (bgSelect && miscBg) {
+    miscBg.value = bgSelect.value || "default";
+  }
+
+  const miscClose = $("ncm-misc-close-select");
+  if (miscClose) {
+    miscClose.value = closeAction || "ask";
+  }
+
+  if (window.CDCaseApp?.getVersion) {
+    window.CDCaseApp.getVersion().then(ver => {
+      const verEl = $("ncm-misc-ver-label");
+      if (verEl && ver) verEl.textContent = `CD-Netease-Player v${ver}`;
+    }).catch(() => {});
+  }
+}
+
+function switchDrawerTab(tab) {
+  currentActiveDrawerTab = tab;
+  closeAlbumDetail();
+  closeArtistDetail();
+
+  const searchWrap = document.querySelector(".ncm-drawer-search-wrap");
+
+  if (tab === "playlists") {
+    tabPlaylists?.classList.add("active");
+    tabPlaylists?.setAttribute("aria-selected", "true");
     tabAlbums?.classList.remove("active");
     tabAlbums?.setAttribute("aria-selected", "false");
+    tabMisc?.classList.remove("active");
+    tabMisc?.setAttribute("aria-selected", "false");
+    if (searchWrap) searchWrap.hidden = false;
+    if (miscView) miscView.hidden = true;
+
     if (searchInput && searchInput.value.trim()) {
       performDrawerSearch(searchInput.value);
     } else {
@@ -1284,18 +1349,16 @@ if (tabPlaylists) {
       if (albumsView) albumsView.hidden = true;
       if (searchView) searchView.hidden = true;
     }
-  };
-}
-
-if (tabAlbums) {
-  tabAlbums.onclick = () => {
-    currentActiveDrawerTab = "albums";
-    closeAlbumDetail();
-    closeArtistDetail();
-    tabAlbums.classList.add("active");
-    tabAlbums.setAttribute("aria-selected", "true");
+  } else if (tab === "albums") {
+    tabAlbums?.classList.add("active");
+    tabAlbums?.setAttribute("aria-selected", "true");
     tabPlaylists?.classList.remove("active");
     tabPlaylists?.setAttribute("aria-selected", "false");
+    tabMisc?.classList.remove("active");
+    tabMisc?.setAttribute("aria-selected", "false");
+    if (searchWrap) searchWrap.hidden = false;
+    if (miscView) miscView.hidden = true;
+
     if (searchInput && searchInput.value.trim()) {
       performDrawerSearch(searchInput.value);
     } else {
@@ -1304,8 +1367,27 @@ if (tabAlbums) {
       if (searchView) searchView.hidden = true;
     }
     loadCollectedAlbums();
-  };
+  } else if (tab === "misc") {
+    tabMisc?.classList.add("active");
+    tabMisc?.setAttribute("aria-selected", "true");
+    tabPlaylists?.classList.remove("active");
+    tabPlaylists?.setAttribute("aria-selected", "false");
+    tabAlbums?.classList.remove("active");
+    tabAlbums?.setAttribute("aria-selected", "false");
+    if (searchWrap) searchWrap.hidden = true;
+
+    if (playlistsView) playlistsView.hidden = true;
+    if (albumsView) albumsView.hidden = true;
+    if (searchView) searchView.hidden = true;
+    if (miscView) miscView.hidden = false;
+
+    syncMiscViewValues();
+  }
 }
+
+if (tabPlaylists) tabPlaylists.onclick = () => switchDrawerTab("playlists");
+if (tabAlbums) tabAlbums.onclick = () => switchDrawerTab("albums");
+if (tabMisc) tabMisc.onclick = () => switchDrawerTab("misc");
 
 const trackList = $("ncm-track-list");
 const queueList = $("ncm-queue-list");
@@ -1415,10 +1497,106 @@ queueList.addEventListener("contextmenu", event => {
   if (song) showContextMenu(event, song);
 });
 
+// 单图标循环切换播放模式与微交互
+const orderBtn = $("ncm-order-btn");
+const orderIcons = {
+  loop: {
+    title: "播放模式: 列表循环",
+    toast: "已切换为: 列表循环",
+    path: "M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"
+  },
+  repeat: {
+    title: "播放模式: 单曲循环",
+    toast: "已切换为: 单曲循环",
+    path: "M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.8v4H13z"
+  },
+  shuffle: {
+    title: "播放模式: 随机播放",
+    toast: "已切换为: 随机播放",
+    path: "M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"
+  },
+  sequential: {
+    title: "播放模式: 顺序播放",
+    toast: "已切换为: 顺序播放",
+    path: "M4 5h16v2H4zm0 5h16v2H4zm0 5h10v2H4zm12-1v7l5-3.5z"
+  }
+};
+
+function updateOrderButtonUI(mode, showToast = false) {
+  const conf = orderIcons[mode] || orderIcons.loop;
+  if (orderBtn) {
+    orderBtn.title = conf.title;
+    const pathEl = orderBtn.querySelector("svg path");
+    if (pathEl) pathEl.setAttribute("d", conf.path);
+  }
+  if (showToast) {
+    showPlayerToast(conf.toast);
+  }
+}
+
 orderControl.onchange = () => {
   localStorage.setItem("ncm_order", orderControl.value);
   rebuildQueueOrder(currentIdx);
+  updateOrderButtonUI(orderControl.value, false);
 };
+
+if (orderBtn) {
+  orderBtn.onclick = () => {
+    const modes = ["loop", "repeat", "shuffle", "sequential"];
+    const curIdx = modes.indexOf(orderControl.value);
+    const nextMode = modes[(curIdx + 1) % modes.length];
+    orderControl.value = nextMode;
+    localStorage.setItem("ncm_order", nextMode);
+    rebuildQueueOrder(currentIdx);
+    updateOrderButtonUI(nextMode, true);
+  };
+}
+updateOrderButtonUI(orderControl.value, false);
+
+// 悬停展开式音量胶囊一键静音/恢复
+const volumeBtn = $("ncm-volume-btn");
+const volumeInput = $("ncm-volume");
+let lastVolume = 0.7;
+
+function updateVolumeIcon(vol) {
+  const waves = volumeBtn?.querySelector(".volume-waves");
+  if (waves) {
+    waves.style.display = vol <= 0.01 ? "none" : "";
+  }
+  if (volumeBtn) {
+    volumeBtn.title = vol <= 0.01 ? "点击取消静音" : `音量: ${Math.round(vol * 100)}% (点击静音)`;
+  }
+}
+
+if (volumeBtn && volumeInput) {
+  volumeBtn.onclick = (e) => {
+    e.stopPropagation();
+    const cur = parseFloat(volumeInput.value);
+    if (cur > 0.01) {
+      lastVolume = cur;
+      volumeInput.value = 0;
+    } else {
+      volumeInput.value = lastVolume > 0.01 ? lastVolume : 0.7;
+    }
+    updateVolumeIcon(parseFloat(volumeInput.value));
+    updateSlider(volumeInput, parseFloat(volumeInput.value) * 100);
+    audio.volume = parseFloat(volumeInput.value);
+  };
+
+  volumeInput.addEventListener("input", () => {
+    updateVolumeIcon(parseFloat(volumeInput.value));
+  });
+  updateVolumeIcon(parseFloat(volumeInput.value || 0.7));
+}
+
+// 底部曲目微卡片点击切换聚焦模式
+const trackPreview = $("ncm-track-preview");
+if (trackPreview) {
+  trackPreview.onclick = () => {
+    setFocusMode();
+  };
+}
+
 $("ncm-queue-open").onclick = (e) => {
   e.stopPropagation();
   if (queueDialog.open) {
@@ -1454,20 +1632,31 @@ window.addEventListener("pointerdown", (e) => {
 }, true);
 
 function setControlsHidden(hidden, focus = false) {
-  $("ncm-controls").hidden = hidden;
-  $("ncm-show-controls").hidden = !hidden;
+  const controlsEl = $("ncm-controls");
+  const showControlsEl = $("ncm-show-controls");
+  if (controlsEl) controlsEl.hidden = hidden;
+  if (showControlsEl) showControlsEl.hidden = !hidden;
   document.body.classList.toggle("ncm-controls-hidden", hidden);
-  if (focus) $(hidden ? "ncm-show-controls" : "ncm-hide-controls").focus();
+  if (focus) {
+    if (hidden && showControlsEl) showControlsEl.focus();
+    else if (!hidden && $("ncm-hide-controls")) $("ncm-hide-controls").focus();
+  }
 }
-$("ncm-hide-controls").onclick = () => {
-  localStorage.setItem("ncm_controls_hidden", "true");
-  setControlsHidden(true, true);
-};
-$("ncm-show-controls").onclick = () => {
-  localStorage.removeItem("ncm_controls_hidden");
-  setControlsHidden(false, true);
-};
-setControlsHidden(localStorage.getItem("ncm_controls_hidden") === "true");
+if ($("ncm-hide-controls")) {
+  $("ncm-hide-controls").onclick = () => {
+    localStorage.setItem("ncm_controls_hidden", "true");
+    setControlsHidden(true, true);
+  };
+}
+if ($("ncm-show-controls")) {
+  $("ncm-show-controls").onclick = () => {
+    localStorage.removeItem("ncm_controls_hidden");
+    setControlsHidden(false, true);
+  };
+}
+if (localStorage.getItem("ncm_controls_hidden") === "true") {
+  setControlsHidden(true);
+}
 
 // ===== 4. 播放指定曲目（核心流程） =====
 const playbackError = (id, category, detail) =>
@@ -1764,6 +1953,12 @@ function updateFocusCover(song) {
   const albumEl = $("amll-focus-album");
   const bgArt = $("amll-focus-bg-art");
   const badgeEl = $("amll-focus-badge");
+
+  const miniCover = $("ncm-mini-cover");
+  const miniFallback = $("ncm-mini-cover-fallback");
+  const barTitle = $("ncm-bar-title");
+  const barArtist = $("ncm-bar-artist");
+
   if (!song) {
     if (coverImg) coverImg.src = "";
     if (titleEl) titleEl.textContent = "";
@@ -1771,12 +1966,36 @@ function updateFocusCover(song) {
     if (albumEl) albumEl.textContent = "";
     if (bgArt) bgArt.style.backgroundImage = "";
     if (badgeEl) { badgeEl.textContent = ""; badgeEl.hidden = true; }
+    if (miniCover) { miniCover.src = ""; miniCover.hidden = true; }
+    if (miniFallback) miniFallback.hidden = false;
+    if (barTitle) barTitle.textContent = "暂未播放";
+    if (barArtist) barArtist.textContent = "网易云音乐";
     return;
   }
   const artist = (song.ar || []).map(a => a.name).join(" / ");
   const albumTitle = song.al?.name || song.name || "";
   const coverUrl = song.al?.picUrl ? `${song.al.picUrl}?param=800y800` : "";
+  const miniCoverUrl = song.al?.picUrl ? `${song.al.picUrl}?param=120y120` : coverUrl;
+
   if (coverImg) coverImg.src = coverUrl;
+  if (miniCover) {
+    if (miniCoverUrl) {
+      miniCover.src = miniCoverUrl;
+      miniCover.hidden = false;
+      if (miniFallback) miniFallback.hidden = true;
+    } else {
+      miniCover.hidden = true;
+      if (miniFallback) miniFallback.hidden = false;
+    }
+  }
+  if (barTitle) {
+    barTitle.textContent = song.name || "未知曲目";
+    barTitle.title = song.name || "";
+  }
+  if (barArtist) {
+    barArtist.textContent = artist || "未知歌手";
+    barArtist.title = artist || "";
+  }
   if (titleEl) titleEl.textContent = song.name || "未知曲目";
   if (artistEl) {
     artistEl.textContent = artist || "未知歌手";
@@ -2583,6 +2802,16 @@ $("ncm-logout").onclick = async () => {
   $("ncm-playlist-select").replaceChildren(placeholder);
   $("ncm-user").textContent = "未登录";
   $("ncm-btn-login").textContent = "扫码登录";
+  const miscAvatar = $("ncm-misc-avatar");
+  const miscAvatarFallback = $("ncm-misc-avatar-fallback");
+  if (miscAvatar) miscAvatar.hidden = true;
+  if (miscAvatarFallback) miscAvatarFallback.hidden = false;
+  const miscVip = $("ncm-misc-vip-badge");
+  if (miscVip) miscVip.hidden = true;
+  const miscUserDesc = $("ncm-misc-user-desc");
+  if (miscUserDesc) miscUserDesc.textContent = "登录后可同步你的歌单与收藏专辑";
+  const miscLogout = $("ncm-misc-logout");
+  if (miscLogout) miscLogout.hidden = true;
   $("ncm-time-cur").textContent = $("ncm-time-tot").textContent = "00:00";
   $("ncm-time-tot").title = "";
   window.AMLLPlayer?.reset();
@@ -2850,6 +3079,7 @@ function applyDualAccentColors(rgb1, rgb2) {
   root.style.setProperty("--bg-accent-1-dark", c1Dark);
   root.style.setProperty("--bg-accent-2", c2);
   root.style.setProperty("--bg-accent-2-dark", c2Dark);
+  root.style.setProperty("--accent-color-rgb", `${rgb1[0]}, ${rgb1[1]}, ${rgb1[2]}`);
 }
 
 let colorExtractionGen = 0;
@@ -2991,7 +3221,7 @@ if (bgModeSelect) {
 function initCDCaseInteractions() {
   const isExcluded = (target) => {
     return target.closest?.(
-      ".desktop-titlebar, #ncm-controls, #ncm-topbar, #ncm-topbar-show, " +
+      ".desktop-titlebar, #ncm-controls, " +
       "#ncm-drawer, #ncm-drawer-backdrop, #ncm-qr-modal, #ncm-settings, " +
       "#ncm-show-controls, #ncm-queue, #amll-focus-view, " +
       "#ncm-right-glass-strip, #ncm-left-edge-strip, #ncm-left-glass-strip"
@@ -3102,12 +3332,16 @@ if (transToggleBtn) {
   transToggleBtn.onclick = () => {
     const active = window.AMLLPlayer?.toggleTranslation();
     transToggleBtn.classList.toggle("active", active);
+    const textSpan = transToggleBtn.querySelector(".switch-text");
+    if (textSpan) textSpan.textContent = active ? "已开启" : "已关闭";
   };
 }
 if (romaToggleBtn) {
   romaToggleBtn.onclick = () => {
     const active = window.AMLLPlayer?.toggleRomaji();
     romaToggleBtn.classList.toggle("active", active);
+    const textSpan = romaToggleBtn.querySelector(".switch-text");
+    if (textSpan) textSpan.textContent = active ? "已开启" : "已关闭";
   };
 }
 
@@ -3116,35 +3350,55 @@ if (window.AMLLPlayer) {
   window.AMLLPlayer.init($("amll-container"), audio);
 }
 
-// ===== 11. 顶部菜单栏折叠/展开 =====
-const topbarHideBtn = $("ncm-topbar-hide");
-const topbarShowBtn = $("ncm-topbar-show");
-
-function setTopbarHidden(hidden) {
-  document.body.classList.toggle("ncm-topbar-hidden", hidden);
-  if (topbarShowBtn) topbarShowBtn.hidden = !hidden;
-  if (hidden) {
-    localStorage.setItem("ncm_topbar_hidden", "true");
-  } else {
-    localStorage.removeItem("ncm_topbar_hidden");
-  }
-}
-
-if (topbarHideBtn) {
-  topbarHideBtn.onclick = (e) => {
-    e.stopPropagation();
-    setTopbarHidden(true);
-  };
-}
-if (topbarShowBtn) {
-  topbarShowBtn.onclick = (e) => {
-    e.stopPropagation();
-    setTopbarHidden(false);
+// ===== 11. 杂项菜单与快捷偏好联动绑定 =====
+const miscLogoutBtn = $("ncm-misc-logout");
+if (miscLogoutBtn) {
+  miscLogoutBtn.onclick = () => {
+    $("ncm-logout")?.click();
   };
 }
 
-if (localStorage.getItem("ncm_topbar_hidden") === "true") {
-  setTopbarHidden(true);
+const miscQualitySelect = $("ncm-misc-quality-select");
+const mainQualitySelect = $("ncm-quality");
+if (miscQualitySelect && mainQualitySelect) {
+  miscQualitySelect.value = mainQualitySelect.value || "highest";
+  miscQualitySelect.onchange = () => {
+    mainQualitySelect.value = miscQualitySelect.value;
+    mainQualitySelect.dispatchEvent(new Event("change"));
+  };
+}
+
+const miscBgSelect = $("ncm-misc-bg-select");
+const mainBgSelect = $("ncm-setting-bg-mode");
+if (miscBgSelect && mainBgSelect) {
+  miscBgSelect.value = mainBgSelect.value || "default";
+  miscBgSelect.onchange = () => {
+    mainBgSelect.value = miscBgSelect.value;
+    mainBgSelect.dispatchEvent(new Event("change"));
+  };
+}
+
+const miscCloseSelect = $("ncm-misc-close-select");
+if (miscCloseSelect) {
+  miscCloseSelect.value = closeAction || "ask";
+  miscCloseSelect.onchange = () => {
+    closeAction = miscCloseSelect.value;
+    localStorage.setItem("ncm_close_action", closeAction);
+    window.CDCaseApp?.setCloseAction(closeAction);
+    if (closeActionSelect) closeActionSelect.value = closeAction;
+  };
+}
+
+const miscCheckUpdateBtn = $("ncm-misc-check-update-btn");
+if (miscCheckUpdateBtn) {
+  miscCheckUpdateBtn.onclick = () => {
+    const originalCheckBtn = $("ncm-check-update-btn");
+    if (originalCheckBtn) {
+      originalCheckBtn.click();
+      const statusEl = $("ncm-misc-update-status");
+      if (statusEl) statusEl.textContent = "正在检测新版本...";
+    }
+  };
 }
 
 // ===== 13. 左右两侧手势滑动交互 (右侧向左拉出歌单 / 左侧向右切换 CD 与聚焦模式) =====
@@ -3389,34 +3643,13 @@ if (localStorage.getItem("ncm_topbar_hidden") === "true") {
   });
 })();
 
-// ===== 14. 菜单栏与折叠按钮位置悬浮显现交互（移至其位置才显示，离开其位置自动平滑隐藏） =====
+// ===== 14. 底部播放控制栏位置悬浮显现交互（移至其位置才显示，离开其位置自动平滑隐藏） =====
 (function initHoverPositionUiController() {
-  const topbar = $("ncm-topbar");
-  const topbarShow = $("ncm-topbar-show");
   const controls = $("ncm-controls");
   const controlsShow = $("ncm-show-controls");
 
-  let topbarHideTimer = null;
   let controlsHideTimer = null;
   let isPointerDown = false;
-
-  function showTopbar() {
-    clearTimeout(topbarHideTimer);
-    topbar?.classList.add("hover-revealed");
-    topbarShow?.classList.add("hover-revealed");
-  }
-
-  function hideTopbar(delay = 240) {
-    clearTimeout(topbarHideTimer);
-    topbarHideTimer = setTimeout(() => {
-      const isModalOpen = !!document.querySelector("dialog[open], #ncm-qr-modal:not(.hidden)");
-      const isDrawerOpen = document.body.classList.contains("ncm-drawer-open");
-      if (!isModalOpen && !isDrawerOpen) {
-        topbar?.classList.remove("hover-revealed");
-        topbarShow?.classList.remove("hover-revealed");
-      }
-    }, delay);
-  }
 
   function showControls() {
     clearTimeout(controlsHideTimer);
@@ -3441,27 +3674,7 @@ if (localStorage.getItem("ncm_topbar_hidden") === "true") {
     const winW = window.innerWidth;
     const winH = window.innerHeight;
 
-    // 1. 判断鼠标是否在顶部菜单/顶部折叠按钮的指定位置区域
-    const isTopbarHidden = document.body.classList.contains("ncm-topbar-hidden");
-    let isOverTop = false;
-
-    if (!isTopbarHidden && topbar) {
-      const r = topbar.getBoundingClientRect();
-      isOverTop = (x >= r.left - 20 && x <= r.right + 20 && y >= 0 && y <= r.bottom + 20) ||
-                  (y <= 75 && x >= winW - 520);
-    } else if (isTopbarHidden && topbarShow && !topbarShow.hidden) {
-      const r = topbarShow.getBoundingClientRect();
-      isOverTop = (x >= r.left - 25 && x <= winW && y >= 0 && y <= r.bottom + 25) ||
-                  (y <= 75 && x >= winW - 90);
-    }
-
-    if (isOverTop) {
-      showTopbar();
-    } else {
-      hideTopbar();
-    }
-
-    // 2. 判断鼠标是否在底部控制栏/底部折叠按钮的指定位置区域
+    // 判断鼠标是否在底部控制栏/底部折叠按钮的指定位置区域
     const isControlsHidden = document.body.classList.contains("ncm-controls-hidden");
     let isOverBottom = false;
 
@@ -3489,9 +3702,6 @@ if (localStorage.getItem("ncm_topbar_hidden") === "true") {
     if (controls?.contains(target) || controlsShow?.contains(target)) {
       showControls();
     }
-    if (topbar?.contains(target) || topbarShow?.contains(target)) {
-      showTopbar();
-    }
   }, { passive: true });
 
   window.addEventListener("pointerup", () => {
@@ -3501,12 +3711,10 @@ if (localStorage.getItem("ncm_topbar_hidden") === "true") {
 
   window.addEventListener("mouseleave", () => {
     if (!isPointerDown) {
-      hideTopbar(100);
       hideControls(100);
     }
   }, { passive: true });
 
-  topbar?.addEventListener("focusin", showTopbar);
   controls?.addEventListener("focusin", showControls);
 })();
 
