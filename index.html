@@ -227,6 +227,44 @@
         <ul id="ncm-album-detail-track-list" class="ncm-track-list"></ul>
       </div>
     </div>
+
+    <!-- 视图 5：歌手主页视图（歌手信息、全部专辑陈列与热门曲目） -->
+    <div id="ncm-artist-view" class="ncm-drawer-view" hidden>
+      <div class="ncm-artist-header">
+        <button type="button" id="ncm-artist-back" class="ncm-detail-back-btn" title="返回">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+          <span id="ncm-artist-back-text">返回</span>
+        </button>
+      </div>
+      <div class="ncm-artist-card">
+        <div class="ncm-artist-avatar-wrap">
+          <img id="ncm-artist-avatar" src="" alt="歌手头像" />
+        </div>
+        <div class="ncm-artist-profile">
+          <h3 id="ncm-artist-name" class="ncm-artist-name"></h3>
+          <p id="ncm-artist-meta" class="ncm-artist-meta"></p>
+          <p id="ncm-artist-desc" class="ncm-artist-desc" hidden></p>
+        </div>
+      </div>
+      <div class="ncm-artist-tabs" role="tablist">
+        <button id="ncm-artist-tab-albums" class="ncm-artist-tab active" type="button" role="tab" aria-selected="true">全部专辑 (<span id="ncm-artist-album-count">0</span>)</button>
+        <button id="ncm-artist-tab-songs" class="ncm-artist-tab" type="button" role="tab" aria-selected="false">热门单曲 (<span id="ncm-artist-song-count">0</span>)</button>
+      </div>
+      <div id="ncm-artist-albums-view" class="ncm-artist-subview">
+        <div id="ncm-artist-albums-grid" class="ncm-albums-grid"></div>
+      </div>
+      <div id="ncm-artist-songs-view" class="ncm-artist-subview" hidden>
+        <div class="ncm-artist-songs-header">
+          <button type="button" id="ncm-artist-play-all" class="ncm-btn ncm-btn-primary">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+            <span>播放全部热门</span>
+          </button>
+        </div>
+        <div class="ncm-album-detail-list-wrap">
+          <ul id="ncm-artist-songs-list" class="ncm-track-list"></ul>
+        </div>
+      </div>
+    </div>
   </aside>
 
   <!-- 自定义毛玻璃右键上下文菜单 -->
@@ -238,6 +276,10 @@
     <button type="button" id="ncm-ctx-play-next" class="ncm-ctx-item">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
       <span>下一首播放</span>
+    </button>
+    <button type="button" id="ncm-ctx-artist" class="ncm-ctx-item">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+      <span id="ncm-ctx-artist-text">查看歌手主页</span>
     </button>
   </div>
 

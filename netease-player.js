@@ -191,6 +191,7 @@ let contextMenuTargetSong = null;
 const contextMenu = $("ncm-context-menu");
 const ctxPlayBtn = $("ncm-ctx-play");
 const ctxPlayNextBtn = $("ncm-ctx-play-next");
+const ctxArtistBtn = $("ncm-ctx-artist");
 
 function hideContextMenu() {
   if (contextMenu) {
@@ -210,7 +211,7 @@ function showContextMenu(e, song) {
   contextMenu.style.display = "flex";
 
   const menuWidth = 215;
-  const menuHeight = 90;
+  const menuHeight = 130;
   const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10);
   const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10);
   contextMenu.style.left = `${Math.max(10, x)}px`;
@@ -250,6 +251,21 @@ if (ctxPlayNextBtn) {
   };
 }
 
+if (ctxArtistBtn) {
+  ctxArtistBtn.onclick = () => {
+    if (!contextMenuTargetSong) return;
+    const song = contextMenuTargetSong;
+    hideContextMenu();
+    const artistId = song.ar?.[0]?.id;
+    const artistName = song.ar?.[0]?.name;
+    if (artistId) {
+      openArtistDetail(artistId, artistName);
+    } else {
+      showPlayerToast("未获取到该歌曲的歌手信息");
+    }
+  };
+}
+
 document.addEventListener("click", (e) => {
   if (!contextMenu?.hidden && !e.target.closest("#ncm-context-menu")) {
     hideContextMenu();
@@ -280,8 +296,15 @@ function createTrackRow(song, position, onPlayClick) {
   title.className = "ncm-track-title";
   title.textContent = song.name;
   const artist = document.createElement("span");
-  artist.className = "ncm-track-artist";
+  artist.className = "ncm-track-artist clickable-artist";
   artist.textContent = (song.ar || []).map(item => item.name).join(" / ");
+  artist.title = artist.textContent ? `查看歌手: ${artist.textContent}` : "";
+  artist.onclick = (e) => {
+    e.stopPropagation();
+    const aId = song.ar?.[0]?.id;
+    const aName = song.ar?.[0]?.name;
+    if (aId) openArtistDetail(aId, aName);
+  };
   button.title = artist.textContent ? `${song.name} - ${artist.textContent}` : song.name;
   info.append(title, artist);
   button.append(number, info);
@@ -453,8 +476,11 @@ function renderPlaylistAccordion() {
         tracks = songs;
         queueTracks = songs;
         queueName = pl.name;
-        rebuildQueueOrder(0);
-        playTrack(0);
+        const startIdx = (orderControl.value === "shuffle" && songs.length > 1)
+          ? Math.floor(Math.random() * songs.length)
+          : 0;
+        rebuildQueueOrder(startIdx);
+        playTrack(startIdx);
         showPlayerToast(`已开始播放歌单: ${pl.name} (${songs.length} 首)`);
 
         // 如果歌单总数大于已加载数量，后台静默拉取剩余曲目并实时追加到播放队列
@@ -722,8 +748,11 @@ function createMiniCDCase(album, { showQuickPlay = true } = {}) {
         tracks = songs;
         queueTracks = songs;
         queueName = album.name;
-        rebuildQueueOrder(0);
-        playTrack(0);
+        const startIdx = (orderControl.value === "shuffle" && songs.length > 1)
+          ? Math.floor(Math.random() * songs.length)
+          : 0;
+        rebuildQueueOrder(startIdx);
+        playTrack(startIdx);
         showPlayerToast(`已开始播放专辑: ${album.name} (${songs.length} 首)`);
       } catch (err) {
         quickPlay.style.opacity = "";
@@ -748,34 +777,103 @@ const albumDetailAddAll = $("ncm-album-detail-add-all");
 const albumDetailTrackList = $("ncm-album-detail-track-list");
 
 let currentActiveAlbum = null;
+let currentActiveAlbumSource = null;
+let currentActiveArtist = null;
+let previousDrawerTabOrView = "playlists";
+
+const artistView = $("ncm-artist-view");
+const artistBackBtn = $("ncm-artist-back");
+const artistTabAlbums = $("ncm-artist-tab-albums");
+const artistTabSongs = $("ncm-artist-tab-songs");
+const artistAlbumsView = $("ncm-artist-albums-view");
+const artistSongsView = $("ncm-artist-songs-view");
+const artistAlbumsGrid = $("ncm-artist-albums-grid");
+const artistSongsList = $("ncm-artist-songs-list");
+
+function switchArtistSubTab(tab) {
+  if (tab === "albums") {
+    artistTabAlbums?.classList.add("active");
+    artistTabAlbums?.setAttribute("aria-selected", "true");
+    artistTabSongs?.classList.remove("active");
+    artistTabSongs?.setAttribute("aria-selected", "false");
+    if (artistAlbumsView) artistAlbumsView.hidden = false;
+    if (artistSongsView) artistSongsView.hidden = true;
+  } else {
+    artistTabSongs?.classList.add("active");
+    artistTabSongs?.setAttribute("aria-selected", "true");
+    artistTabAlbums?.classList.remove("active");
+    artistTabAlbums?.setAttribute("aria-selected", "false");
+    if (artistAlbumsView) artistAlbumsView.hidden = true;
+    if (artistSongsView) artistSongsView.hidden = false;
+  }
+}
+
+if (artistTabAlbums) artistTabAlbums.onclick = () => switchArtistSubTab("albums");
+if (artistTabSongs) artistTabSongs.onclick = () => switchArtistSubTab("songs");
+
+function closeArtistDetail() {
+  if (artistView) artistView.hidden = true;
+  currentActiveArtist = null;
+
+  if (previousDrawerTabOrView === "album-detail" && currentActiveAlbum) {
+    if (albumDetailView) albumDetailView.hidden = false;
+  } else if (previousDrawerTabOrView === "search") {
+    if (searchView) searchView.hidden = false;
+  } else if (previousDrawerTabOrView === "albums") {
+    if (albumsView) albumsView.hidden = false;
+  } else {
+    if (playlistsView) playlistsView.hidden = false;
+  }
+}
+
+if (artistBackBtn) artistBackBtn.onclick = closeArtistDetail;
 
 function closeAlbumDetail() {
   if (albumDetailView) albumDetailView.hidden = true;
-  if (albumsView) albumsView.hidden = false;
+  if (currentActiveAlbumSource === "artist" && currentActiveArtist) {
+    if (artistView) artistView.hidden = false;
+  } else if (currentActiveDrawerTab === "playlists") {
+    if (playlistsView) playlistsView.hidden = false;
+  } else {
+    if (albumsView) albumsView.hidden = false;
+  }
   currentActiveAlbum = null;
+  currentActiveAlbumSource = null;
 }
 
 if (albumDetailBackBtn) {
   albumDetailBackBtn.onclick = closeAlbumDetail;
 }
 
-async function openAlbumDetail(album) {
+async function openAlbumDetail(album, source = null) {
   if (!album || !albumDetailView) return;
   currentActiveAlbum = album;
+  currentActiveAlbumSource = source || (currentActiveArtist && !artistView?.hidden ? "artist" : null);
 
   if (albumsView) albumsView.hidden = true;
   if (playlistsView) playlistsView.hidden = true;
   if (searchView) searchView.hidden = true;
+  if (artistView) artistView.hidden = true;
   albumDetailView.hidden = false;
 
+  const backText = albumDetailBackBtn?.querySelector("span");
+  if (backText) {
+    backText.textContent = currentActiveAlbumSource === "artist" ? "返回歌手主页" : "返回全部专辑";
+  }
+
   const artistName = (album.artists || []).map(a => a.name).join(" / ") || album.artist?.name || "";
+  const artistId = album.artist?.id || album.artists?.[0]?.id;
   if (albumDetailTitle) {
     albumDetailTitle.textContent = album.name;
     albumDetailTitle.title = album.name;
   }
   if (albumDetailArtist) {
     albumDetailArtist.textContent = artistName;
-    albumDetailArtist.title = artistName;
+    albumDetailArtist.title = artistName ? `查看歌手: ${artistName}` : "";
+    albumDetailArtist.classList.add("clickable-artist");
+    albumDetailArtist.onclick = () => {
+      if (artistId) openArtistDetail(artistId, artistName);
+    };
   }
   if (albumDetailMeta) {
     albumDetailMeta.textContent = `共 ${album.size || 0} 首曲目`;
@@ -813,8 +911,11 @@ async function openAlbumDetail(album) {
         tracks = songs;
         queueTracks = songs;
         queueName = album.name;
-        rebuildQueueOrder(0);
-        playTrack(0);
+        const startIdx = (orderControl.value === "shuffle" && songs.length > 1)
+          ? Math.floor(Math.random() * songs.length)
+          : 0;
+        rebuildQueueOrder(startIdx);
+        playTrack(startIdx);
         showPlayerToast(`已开始播放专辑: ${album.name}`);
       };
     }
@@ -880,10 +981,15 @@ function renderAlbumsGrid() {
     titleEl.title = album.name;
 
     const artistEl = document.createElement("span");
-    artistEl.className = "ncm-album-artist";
+    artistEl.className = "ncm-album-artist clickable-artist";
     const artistName = (album.artists || []).map(a => a.name).join(" / ") || album.artist?.name || "";
     artistEl.textContent = artistName;
-    artistEl.title = artistName;
+    artistEl.title = artistName ? `查看歌手: ${artistName}` : "";
+    const artistId = album.artist?.id || album.artists?.[0]?.id;
+    artistEl.onclick = (e) => {
+      e.stopPropagation();
+      if (artistId) openArtistDetail(artistId, artistName);
+    };
 
     const metaEl = document.createElement("span");
     metaEl.className = "ncm-album-meta";
@@ -901,6 +1007,164 @@ function renderAlbumsGrid() {
   });
 }
 
+// ===== 3.2.1 歌手主页与专辑列表浏览播放 =====
+async function openArtistDetail(artistId, artistName) {
+  if (!artistId) {
+    showPlayerToast("无法获取歌手信息");
+    return;
+  }
+
+  // 记录之前的视图来源，以便精确返回
+  if (!albumDetailView?.hidden) {
+    previousDrawerTabOrView = "album-detail";
+  } else if (!searchView?.hidden) {
+    previousDrawerTabOrView = "search";
+  } else if (!albumsView?.hidden) {
+    previousDrawerTabOrView = "albums";
+  } else {
+    previousDrawerTabOrView = "playlists";
+  }
+
+  currentActiveArtist = { id: artistId, name: artistName };
+
+  // 隐藏其他抽屉视图，显现歌手主页
+  if (playlistsView) playlistsView.hidden = true;
+  if (albumsView) albumsView.hidden = true;
+  if (searchView) searchView.hidden = true;
+  if (albumDetailView) albumDetailView.hidden = true;
+  if (artistView) artistView.hidden = false;
+
+  switchArtistSubTab("albums");
+  setDrawerOpen(true);
+
+  const nameEl = $("ncm-artist-name");
+  const metaEl = $("ncm-artist-meta");
+  const avatarEl = $("ncm-artist-avatar");
+  const descEl = $("ncm-artist-desc");
+  const albumCountSpan = $("ncm-artist-album-count");
+  const songCountSpan = $("ncm-artist-song-count");
+
+  if (nameEl) nameEl.textContent = artistName || "歌手主页";
+  if (metaEl) metaEl.textContent = "正在获取歌手资料与专辑…";
+  if (descEl) descEl.hidden = true;
+  if (artistAlbumsGrid) artistAlbumsGrid.innerHTML = '<div class="ncm-drawer-loading">正在加载歌手专辑…</div>';
+  if (artistSongsList) artistSongsList.innerHTML = '<div class="ncm-drawer-loading">正在加载热门曲目…</div>';
+
+  try {
+    const [artistRes, albumRes] = await Promise.all([
+      api("/artists", { id: artistId }),
+      api("/artist/album", { id: artistId, limit: 100 })
+    ]);
+
+    if (currentActiveArtist?.id !== artistId) return;
+
+    const artistInfo = artistRes.artist || {};
+    const hotSongs = artistRes.hotSongs || [];
+    const albums = albumRes.hotAlbums || [];
+
+    if (nameEl) nameEl.textContent = artistInfo.name || artistName;
+    if (avatarEl) {
+      avatarEl.src = artistInfo.picUrl ? `${artistInfo.picUrl}?param=180y180` : "";
+      avatarEl.alt = artistInfo.name || "歌手头像";
+    }
+    if (metaEl) {
+      const albumNum = artistInfo.albumSize || albums.length;
+      const musicNum = artistInfo.musicSize || hotSongs.length;
+      metaEl.textContent = `共 ${albumNum} 张专辑 · ${musicNum} 首歌曲`;
+    }
+    if (descEl) {
+      if (artistInfo.briefDesc) {
+        descEl.textContent = artistInfo.briefDesc;
+        descEl.hidden = false;
+      } else {
+        descEl.hidden = true;
+      }
+    }
+
+    if (albumCountSpan) albumCountSpan.textContent = String(albums.length);
+    if (songCountSpan) songCountSpan.textContent = String(hotSongs.length);
+
+    if (artistAlbumsGrid) {
+      artistAlbumsGrid.innerHTML = "";
+      if (!albums.length) {
+        artistAlbumsGrid.innerHTML = '<div class="ncm-drawer-loading">暂无可用专辑</div>';
+      } else {
+        albums.forEach((album) => {
+          const card = document.createElement("div");
+          card.className = "ncm-album-card";
+          card.dataset.albumId = album.id;
+
+          const caseWrap = createMiniCDCase(album, { showQuickPlay: true });
+
+          const info = document.createElement("div");
+          info.className = "ncm-album-info";
+
+          const titleEl = document.createElement("span");
+          titleEl.className = "ncm-album-title";
+          titleEl.textContent = album.name;
+          titleEl.title = album.name;
+
+          const artistTextEl = document.createElement("span");
+          artistTextEl.className = "ncm-album-artist";
+          artistTextEl.textContent = artistInfo.name || artistName;
+
+          const albumMetaEl = document.createElement("span");
+          albumMetaEl.className = "ncm-album-meta";
+          albumMetaEl.textContent = `${album.size || 0} 首`;
+
+          info.append(titleEl, artistTextEl, albumMetaEl);
+          card.append(caseWrap, info);
+
+          card.onclick = () => {
+            openAlbumDetail(album, "artist");
+          };
+
+          artistAlbumsGrid.appendChild(card);
+        });
+      }
+    }
+
+    if (artistSongsList) {
+      artistSongsList.innerHTML = "";
+      if (!hotSongs.length) {
+        artistSongsList.innerHTML = '<div class="ncm-drawer-loading">暂无热门曲目</div>';
+      } else {
+        hotSongs.forEach((song, sIdx) => {
+          const row = createTrackRow(song, sIdx, () => {
+            tracks = hotSongs;
+            queueTracks = hotSongs;
+            queueName = `${artistInfo.name || artistName} - 热门曲目`;
+            rebuildQueueOrder(sIdx);
+            playTrack(sIdx);
+          });
+          artistSongsList.appendChild(row);
+        });
+      }
+    }
+
+    const playAllHotBtn = $("ncm-artist-play-all");
+    if (playAllHotBtn) {
+      playAllHotBtn.onclick = () => {
+        if (!hotSongs.length) return;
+        tracks = hotSongs;
+        queueTracks = hotSongs;
+        queueName = `${artistInfo.name || artistName} - 热门曲目`;
+        const startIdx = (orderControl.value === "shuffle" && hotSongs.length > 1)
+          ? Math.floor(Math.random() * hotSongs.length)
+          : 0;
+        rebuildQueueOrder(startIdx);
+        playTrack(startIdx);
+        showPlayerToast(`已开始播放歌手热门单曲 (${hotSongs.length} 首)`);
+      };
+    }
+
+  } catch (err) {
+    console.error("[NCM] 加载歌手主页失败", err);
+    if (metaEl) metaEl.textContent = "获取歌手资料失败";
+    if (artistAlbumsGrid) artistAlbumsGrid.innerHTML = '<div class="ncm-drawer-loading" style="color:#fda4af">获取歌手专辑失败</div>';
+  }
+}
+
 // ===== 3.3 歌单内曲目即时搜索功能 =====
 const searchInput = $("ncm-drawer-search");
 const searchClearBtn = $("ncm-drawer-search-clear");
@@ -916,6 +1180,7 @@ function performDrawerSearch(keyword) {
     if (searchClearBtn) searchClearBtn.hidden = true;
     if (searchView) searchView.hidden = true;
     if (albumDetailView) albumDetailView.hidden = true;
+    if (artistView) artistView.hidden = true;
     if (currentActiveDrawerTab === "playlists") {
       if (playlistsView) playlistsView.hidden = false;
       if (albumsView) albumsView.hidden = true;
@@ -930,6 +1195,7 @@ function performDrawerSearch(keyword) {
   if (playlistsView) playlistsView.hidden = true;
   if (albumsView) albumsView.hidden = true;
   if (albumDetailView) albumDetailView.hidden = true;
+  if (artistView) artistView.hidden = true;
   if (searchView) searchView.hidden = false;
 
   // 汇集当前已加载的所有曲目（歌单缓存、专辑缓存、当前列表、播放队列）进行全文即时匹配
@@ -1006,6 +1272,7 @@ if (tabPlaylists) {
   tabPlaylists.onclick = () => {
     currentActiveDrawerTab = "playlists";
     closeAlbumDetail();
+    closeArtistDetail();
     tabPlaylists.classList.add("active");
     tabPlaylists.setAttribute("aria-selected", "true");
     tabAlbums?.classList.remove("active");
@@ -1024,6 +1291,7 @@ if (tabAlbums) {
   tabAlbums.onclick = () => {
     currentActiveDrawerTab = "albums";
     closeAlbumDetail();
+    closeArtistDetail();
     tabAlbums.classList.add("active");
     tabAlbums.setAttribute("aria-selected", "true");
     tabPlaylists?.classList.remove("active");
@@ -1068,8 +1336,15 @@ function replaceTrackRows(list, songs, indices) {
     title.className = "ncm-track-title";
     title.textContent = song.name;
     const artist = document.createElement("span");
-    artist.className = "ncm-track-artist";
+    artist.className = "ncm-track-artist clickable-artist";
     artist.textContent = (song.ar || []).map(item => item.name).join(" / ");
+    artist.title = artist.textContent ? `查看歌手: ${artist.textContent}` : "";
+    artist.onclick = (e) => {
+      e.stopPropagation();
+      const aId = song.ar?.[0]?.id;
+      const aName = song.ar?.[0]?.name;
+      if (aId) openArtistDetail(aId, aName);
+    };
     button.title = artist.textContent ? `${song.name} - ${artist.textContent}` : song.name;
     info.append(title, artist);
     button.append(number, info);
@@ -1503,7 +1778,16 @@ function updateFocusCover(song) {
   const coverUrl = song.al?.picUrl ? `${song.al.picUrl}?param=800y800` : "";
   if (coverImg) coverImg.src = coverUrl;
   if (titleEl) titleEl.textContent = song.name || "未知曲目";
-  if (artistEl) artistEl.textContent = artist || "未知歌手";
+  if (artistEl) {
+    artistEl.textContent = artist || "未知歌手";
+    artistEl.classList.add("clickable-artist");
+    artistEl.title = artist ? `查看歌手主页: ${artist}` : "";
+    artistEl.onclick = () => {
+      const aId = song.ar?.[0]?.id;
+      const aName = song.ar?.[0]?.name;
+      if (aId) openArtistDetail(aId, aName);
+    };
+  }
   if (albumEl) albumEl.textContent = albumTitle || "";
   if (bgArt) bgArt.style.backgroundImage = coverUrl ? `url("${coverUrl}")` : "";
 }
@@ -1547,7 +1831,7 @@ async function playTrack(idx) {
   const coverUrl = song.al?.picUrl ? `${song.al.picUrl}?param=800y800` : "";
   updateFocusCover(song);
   bridge.updateTrack({ title: song.name, artist, albumTitle, coverUrl });
-  if (coverUrl) extractAndApplyDualAccents(coverUrl);
+  extractAndApplyDualAccents(coverUrl);
 
   const preferred = quality.value;
   const lyricsRequest = requestFullLyrics(song.id, signal);
@@ -2568,8 +2852,15 @@ function applyDualAccentColors(rgb1, rgb2) {
   root.style.setProperty("--bg-accent-2-dark", c2Dark);
 }
 
+let colorExtractionGen = 0;
+const DEFAULT_DUAL_ACCENTS = [[190, 55, 85], [45, 70, 120]];
+
 function extractAndApplyDualAccents(coverUrl) {
-  if (!coverUrl) return;
+  const currentGen = ++colorExtractionGen;
+  if (!coverUrl) {
+    applyDualAccentColors(DEFAULT_DUAL_ACCENTS[0], DEFAULT_DUAL_ACCENTS[1]);
+    return;
+  }
   if (dualAccentsCache.has(coverUrl)) {
     const [c1, c2] = dualAccentsCache.get(coverUrl);
     applyDualAccentColors(c1, c2);
@@ -2579,7 +2870,12 @@ function extractAndApplyDualAccents(coverUrl) {
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.src = coverUrl;
+  img.onerror = () => {
+    if (currentGen !== colorExtractionGen) return;
+    applyDualAccentColors(DEFAULT_DUAL_ACCENTS[0], DEFAULT_DUAL_ACCENTS[1]);
+  };
   img.onload = () => {
+    if (currentGen !== colorExtractionGen) return;
     try {
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
@@ -2603,9 +2899,10 @@ function extractAndApplyDualAccents(coverUrl) {
       }
 
       if (!colorList.length) {
-        const def1 = [190, 55, 85], def2 = [45, 70, 120];
-        dualAccentsCache.set(coverUrl, [def1, def2]);
-        applyDualAccentColors(def1, def2);
+        dualAccentsCache.set(coverUrl, DEFAULT_DUAL_ACCENTS);
+        if (currentGen === colorExtractionGen) {
+          applyDualAccentColors(DEFAULT_DUAL_ACCENTS[0], DEFAULT_DUAL_ACCENTS[1]);
+        }
         return;
       }
 
@@ -2661,9 +2958,14 @@ function extractAndApplyDualAccents(coverUrl) {
       const res1 = [color1.r, color1.g, color1.b];
       const res2 = [color2.r, color2.g, color2.b];
       dualAccentsCache.set(coverUrl, [res1, res2]);
-      applyDualAccentColors(res1, res2);
+      if (currentGen === colorExtractionGen) {
+        applyDualAccentColors(res1, res2);
+      }
     } catch (e) {
       console.warn("[NCM] 提取双特征色失败:", e);
+      if (currentGen === colorExtractionGen) {
+        applyDualAccentColors(DEFAULT_DUAL_ACCENTS[0], DEFAULT_DUAL_ACCENTS[1]);
+      }
     }
   };
 }
@@ -2928,12 +3230,12 @@ if (localStorage.getItem("ncm_topbar_hidden") === "true") {
     const isDrawerOpen = !drawer.inert;
     const isInsideDrawer = Boolean(e.target.closest?.("#ncm-drawer"));
     const isFocus = document.body.classList.contains("lyrics-focus-mode");
-    // 歌单抽屉感应区：仅限右侧磨砂玻璃条或右边缘 50px 区域，杜绝半屏或歌词区误触
+    // 歌单抽屉感应区：仅限右侧磨砂玻璃条或右边缘 36px 区域，杜绝半屏或歌词区误触
     const isRightZone = Boolean(e.target.closest?.("#ncm-right-glass-strip")) ||
-                       (e.clientX >= window.innerWidth - 50);
+                       (e.clientX >= window.innerWidth - 36);
     // 模式滑块感应区：CD 模式下位于最左侧，聚焦模式下位于封面右侧
     const isLeftZone = Boolean(e.target.closest?.("#ncm-left-glass-strip, #ncm-left-edge-strip")) ||
-                       (!isFocus && e.clientX <= 50);
+                       (!isFocus && e.clientX <= 36);
 
     if (isDrawerOpen) {
       // 歌单抽屉已打开：在抽屉内部或遮罩层上支持向右滑动收起

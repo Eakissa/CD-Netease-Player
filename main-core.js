@@ -474,7 +474,16 @@ async function startApiServer() {
   }
 
   try {
-    const { serveNcmApi } = require("NeteaseCloudMusicApi");
+    let NcmModule;
+    try {
+      NcmModule = require("NeteaseCloudMusicApi");
+    } catch (e1) {
+      // 补丁运行在外部 AppData 目录时，回退定位内置 app.asar 的依赖
+      const baseDir = global.__baseAppDir || __dirname;
+      const directPath = path.join(baseDir, "node_modules", "NeteaseCloudMusicApi");
+      NcmModule = require(directPath);
+    }
+    const { serveNcmApi } = NcmModule;
     await serveNcmApi({
       port: 3000,
       checkVersion: false,

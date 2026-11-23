@@ -7,6 +7,15 @@ const fs = require("fs");
 
 global.__baseAppDir = __dirname;
 
+// 确保无论脚本从何处（内置 app.asar 或外部 patches 目录）require，都能正确解析内置 node_modules
+try {
+  const Module = require("module");
+  const baseNodeModules = path.join(__dirname, "node_modules");
+  if (!Module.globalPaths.includes(baseNodeModules)) {
+    Module.globalPaths.push(baseNodeModules);
+  }
+} catch (e) {}
+
 // 1. 单实例锁检测 (防止重复开启)
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
