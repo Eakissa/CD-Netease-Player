@@ -1934,33 +1934,72 @@ body.lyrics-focus-mode #amll-focus-bg {
   pointer-events: auto; /* 点击背景任意处退出聚焦 */
 }
 
+/* 1. 高清专辑封面底层柔化：使用硬件加速滤波，消除马赛克与低分辨率拉伸感 */
 #amll-focus-bg-art {
   position: absolute;
-  inset: -30%;
-  width: 160%;
-  height: 160%;
+  inset: -15%;
+  width: 130%;
+  height: 130%;
   background-size: cover;
   background-position: center;
-  filter: blur(85px) saturate(220%) brightness(0.35);
-  transform: scale(1.05);
-  animation: amllArtFloat 26s ease-in-out infinite alternate;
+  filter: blur(64px) saturate(180%) brightness(0.42);
+  transform: scale(1.04);
+  animation: amllArtFloat 32s ease-in-out infinite alternate;
   will-change: transform;
 }
 
 @keyframes amllArtFloat {
-  0% { transform: scale(1.05) translate(0, 0); }
-  50% { transform: scale(1.15) translate(-3%, 2.5%); }
-  100% { transform: scale(1.08) translate(2.5%, -2%); }
+  0% { transform: scale(1.04) translate3d(0, 0, 0); }
+  50% { transform: scale(1.12) translate3d(-2%, 2%, 0); }
+  100% { transform: scale(1.06) translate3d(2%, -1.5%, 0); }
 }
 
+/* 2. 动态多光源液态色彩网格 (Fluid Mesh Glow)：采用 GPU 矢量着色渲染，无限分辨率，彻底告别标清 */
+#amll-focus-bg-mesh {
+  position: absolute;
+  inset: -20%;
+  width: 140%;
+  height: 140%;
+  background:
+    radial-gradient(circle at 25% 30%, var(--bg-accent-1, rgba(65, 85, 140, 0.5)) 0%, transparent 55%),
+    radial-gradient(circle at 75% 25%, var(--bg-accent-2, rgba(135, 55, 115, 0.45)) 0%, transparent 50%),
+    radial-gradient(circle at 35% 75%, var(--bg-accent-2-dark, rgba(25, 35, 75, 0.55)) 0%, transparent 60%),
+    radial-gradient(circle at 80% 80%, var(--bg-accent-1-dark, rgba(55, 20, 50, 0.45)) 0%, transparent 55%);
+  filter: blur(55px);
+  opacity: 0.82;
+  mix-blend-mode: screen;
+  animation: amllMeshDrift 24s ease-in-out infinite alternate;
+  will-change: transform;
+  pointer-events: none;
+}
+
+@keyframes amllMeshDrift {
+  0% { transform: scale(1) translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: scale(1.08) translate3d(2.5%, -2%, 0) rotate(3deg); }
+  100% { transform: scale(1.04) translate3d(-2%, 2.5%, 0) rotate(-2deg); }
+}
+
+/* 3. 极境暗调与毛玻璃景深层 */
 #amll-focus-bg-gradient {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse at 25% 35%, rgba(255, 255, 255, 0.04) 0%, transparent 60%),
-    radial-gradient(ellipse at 75% 65%, rgba(0, 0, 0, 0.45) 0%, transparent 60%),
-    linear-gradient(180deg, rgba(8, 9, 14, 0.45) 0%, rgba(5, 6, 9, 0.88) 100%);
+    radial-gradient(ellipse at 30% 40%, rgba(255, 255, 255, 0.05) 0%, transparent 65%),
+    radial-gradient(ellipse at 80% 70%, rgba(0, 0, 0, 0.5) 0%, transparent 65%),
+    linear-gradient(180deg, rgba(8, 9, 14, 0.35) 0%, rgba(5, 6, 9, 0.75) 100%);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
   pointer-events: none;
+}
+
+/* 4. 视网膜抗色阶断层微噪点层 (Anti-Banding Dither Grain)：彻底消除 8-bit 色彩断层与环形色带 */
+#amll-focus-bg-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.038;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
 }
 
 /* 聚焦模式左侧：Apple Music 风格大专辑封面与曲目信息 */
@@ -2066,33 +2105,36 @@ body.lyrics-focus-mode #ncm-left-edge-strip:hover:not(.strip-idle)::before {
 #amll-focus-title {
   font-size: clamp(22px, 2.5vw, 32px);
   font-weight: 700;
-  color: #ffffff;
+  color: var(--focus-title-color, #ffffff);
   line-height: 1.25;
   letter-spacing: -0.4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
+  text-shadow: var(--focus-title-shadow, 0 4px 16px rgba(0, 0, 0, 0.7));
+  transition: color 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), text-shadow 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 #amll-focus-artist {
   margin-top: 8px;
   font-size: clamp(15px, 1.4vw, 18px);
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--focus-artist-color, rgba(255, 255, 255, 0.85));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  transition: color 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 #amll-focus-album {
   margin-top: 4px;
   font-size: clamp(13px, 1.1vw, 15px);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--focus-album-color, rgba(255, 255, 255, 0.65));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: color 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 #amll-focus-badge-wrap {
@@ -2125,6 +2167,37 @@ body.lyrics-focus-mode #amll-container {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   cursor: default;
+  pointer-events: auto !important;
+}
+
+body.lyrics-focus-mode #amll-container * {
+  pointer-events: auto;
+}
+
+/* 聚焦模式歌词行：Apple Music 风格的悬浮淡颜色圆角方框高亮与点击反馈 */
+body.lyrics-focus-mode .FmKaba_lyricLineWrapper {
+  cursor: pointer !important;
+  border-radius: 14px !important;
+  padding: 0.32em 0.85em !important;
+  margin-left: -0.85em !important;
+  margin-right: -0.85em !important;
+  transition: background-color 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
+              box-shadow 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
+              transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+}
+
+body.lyrics-focus-mode .FmKaba_lyricLineWrapper:hover {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 4px 18px rgba(0, 0, 0, 0.22) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+body.lyrics-focus-mode .FmKaba_lyricLineWrapper:active {
+  background-color: rgba(255, 255, 255, 0.22) !important;
+  transform: scale(0.99) !important;
 }
 
 /* Apple Music 歌词高亮与通透质感：采用标准 Alpha 混合，杜绝加色滤镜导致的字符毛刺与过曝死白 */

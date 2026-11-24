@@ -1946,6 +1946,135 @@ async function requestFullLyrics(songId, signal) {
   }
 }
 
+
+// ==============================================================
+// 聚焦模式与标题高品质随机色彩系统 (含背景防重合轻量化对比度检查)
+// ==============================================================
+function getRelativeLuminance(rgb) {
+  const [rs, gs, bs] = rgb.map(c => {
+    c = c / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+function getContrastRatio(rgb1, rgb2) {
+  const lum1 = getRelativeLuminance(rgb1);
+  const lum2 = getRelativeLuminance(rgb2);
+  const max = Math.max(lum1, lum2);
+  const min = Math.min(lum1, lum2);
+  return (max + 0.05) / (min + 0.05);
+}
+
+function rgbDistance(c1, c2) {
+  return Math.hypot(c1[0] - c2[0], c1[1] - c2[1], c1[2] - c2[2]);
+}
+
+function generateSafeRandomColors(bgRgb = [10, 12, 18]) {
+  const isBgDark = getRelativeLuminance(bgRgb) < 0.25;
+
+  // 现代设计师精选高质感色彩种子库 (霓虹 / 冰晶 / 柔光 / 糖果粉 / 幻影青)
+  const baseHues = [
+    340, // 樱花粉 / Hot Pink
+    15,  // 珊瑚橘 / Sunset Coral
+    40,  // 琥珀金 / Golden Glow
+    85,  // 极光绿 / Electric Lime
+    165, // 薄荷绿 / Cyber Mint
+    195, // 冰河青 / Electric Sky
+    225, // 佩利蓝 / Royal Azure
+    265, // 薰衣紫 / Vivid Lavender
+    310  // 霓虹洋红 / Electric Orchid
+  ];
+
+  function pickValidColor(forbiddenHue = -1) {
+    let bestColor = null;
+    let bestScore = -1;
+
+    for (let attempt = 0; attempt < 18; attempt++) {
+      let h;
+      if (attempt < baseHues.length) {
+        h = baseHues[(Math.floor(Math.random() * baseHues.length) + attempt) % baseHues.length];
+      } else {
+        h = Math.floor(Math.random() * 360);
+      }
+
+      if (forbiddenHue >= 0) {
+        const diff = Math.min(Math.abs(h - forbiddenHue), 360 - Math.abs(h - forbiddenHue));
+        if (diff < 45) continue;
+      }
+
+      const s = 0.80 + Math.random() * 0.18;
+      const l = isBgDark
+        ? (0.72 + Math.random() * 0.14) // 暗色背景下：72% ~ 86% 高亮通透纯净色彩
+        : (0.22 + Math.random() * 0.12); // 浅色背景下：22% ~ 34% 沉着饱满深色
+
+      const rgb = hslToRgb(h, s, l);
+      const contrast = getContrastRatio(rgb, bgRgb);
+      const dist = rgbDistance(rgb, bgRgb);
+
+      if (contrast >= 4.5 && dist >= 85) {
+        return { h, s, l, rgb, contrast, dist };
+      }
+
+      if (contrast * dist > bestScore) {
+        bestScore = contrast * dist;
+        bestColor = { h, s, l, rgb, contrast, dist };
+      }
+    }
+    return bestColor || { h: 180, s: 0.9, l: 0.8, rgb: hslToRgb(180, 0.9, 0.8) };
+  }
+
+  const title = pickValidColor();
+  const album = pickValidColor(title.h);
+  const artistL = isBgDark ? Math.max(0.60, title.l - 0.12) : Math.min(0.38, title.l + 0.12);
+  const artistRgb = hslToRgb(title.h, title.s * 0.65, artistL);
+
+  return {
+    title: `rgb(${title.rgb[0]}, ${title.rgb[1]}, ${title.rgb[2]})`,
+    titleGlow: `rgba(${title.rgb[0]}, ${title.rgb[1]}, ${title.rgb[2]}, 0.35)`,
+    album: `rgb(${album.rgb[0]}, ${album.rgb[1]}, ${album.rgb[2]})`,
+    artist: `rgb(${artistRgb[0]}, ${artistRgb[1]}, ${artistRgb[2]})`
+  };
+}
+
+function applyRandomTextColors() {
+  const root = document.documentElement;
+  const currentAccent = root.style.getPropertyValue("--bg-accent-1");
+  let bgRgb = [10, 12, 18];
+  if (currentAccent && currentAccent.startsWith("rgb(")) {
+    const m = currentAccent.match(/\d+/g);
+    if (m && m.length >= 3) {
+      bgRgb = [
+        Math.round(10 * 0.65 + parseInt(m[0], 10) * 0.35),
+        Math.round(12 * 0.65 + parseInt(m[1], 10) * 0.35),
+        Math.round(18 * 0.65 + parseInt(m[2], 10) * 0.35)
+      ];
+    }
+  }
+
+  const colors = generateSafeRandomColors(bgRgb);
+  root.style.setProperty("--focus-title-color", colors.title);
+  root.style.setProperty("--focus-title-shadow", `0 2px 14px ${colors.titleGlow}, 0 1px 4px rgba(0, 0, 0, 0.75)`);
+  root.style.setProperty("--focus-album-color", colors.album);
+  root.style.setProperty("--focus-artist-color", colors.artist);
+
+  const titleEl = $("amll-focus-title");
+  const albumEl = $("amll-focus-album");
+  const artistEl = $("amll-focus-artist");
+
+  if (titleEl) {
+    titleEl.style.color = colors.title;
+    titleEl.style.textShadow = `0 2px 14px ${colors.titleGlow}, 0 1px 4px rgba(0, 0, 0, 0.75)`;
+  }
+  if (albumEl) {
+    albumEl.style.color = colors.album;
+  }
+  if (artistEl) {
+    artistEl.style.color = colors.artist;
+  }
+}
+window.refreshTitleRandomColors = applyRandomTextColors;
+
 function updateFocusCover(song) {
   const coverImg = $("amll-focus-cover-img");
   const titleEl = $("amll-focus-title");
@@ -2008,7 +2137,10 @@ function updateFocusCover(song) {
     };
   }
   if (albumEl) albumEl.textContent = albumTitle || "";
-  if (bgArt) bgArt.style.backgroundImage = coverUrl ? `url("${coverUrl}")` : "";
+  // 采用 1400px 超清封面大图赋予全景液态流动背景，彻底消除低分辨率标清马赛克
+  const bgCoverUrl = song.al?.picUrl ? `${song.al.picUrl}?param=1400y1400` : coverUrl;
+  if (bgArt) bgArt.style.backgroundImage = bgCoverUrl ? `url("${bgCoverUrl}")` : "";
+  applyRandomTextColors();
 }
 
 let playbackLookup;

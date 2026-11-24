@@ -30,19 +30,43 @@
         containerEl.innerHTML = "";
         containerEl.appendChild(el);
 
-        // 点击歌词行跳转播放进度
-        player.addEventListener("click", (evt) => {
-          if (typeof evt.lineIndex === "number" && currentLines && currentLines[evt.lineIndex] && audioEl) {
+        // 点击歌词行跳转播放进度 (支持 AMLL 原生 line-click、标准 click 与 DOM 委托)
+        const handleLineClick = (evt) => {
+          let targetSec = null;
+          if (evt.line && typeof evt.line.startTime === "number") {
+            targetSec = evt.line.startTime / 1000;
+          } else if (typeof evt.lineIndex === "number" && currentLines && currentLines[evt.lineIndex]) {
             const line = currentLines[evt.lineIndex];
             if (typeof line.startTime === "number") {
-              const targetSec = line.startTime / 1000;
-              audioEl.currentTime = Math.max(0, targetSec);
-              seek(targetSec);
-              if (audioEl.paused) {
-                const playBtn = document.getElementById("ncm-play");
-                playBtn?.click();
+              targetSec = line.startTime / 1000;
+            }
+          }
+          if (targetSec === null && evt.target && evt.target.closest) {
+            const wrapper = evt.target.closest(".FmKaba_lyricLineWrapper");
+            if (wrapper && player && player.lyricGroupElementMap) {
+              const grp = player.lyricGroupElementMap.get(wrapper);
+              if (grp && grp.mainLine && typeof grp.mainLine.startTime === "number") {
+                targetSec = grp.mainLine.startTime / 1000;
               }
             }
+          }
+          if (targetSec !== null && targetSec >= 0 && audioEl) {
+            audioEl.currentTime = targetSec;
+            seek(targetSec);
+            if (audioEl.paused) {
+              const playBtn = document.getElementById("ncm-play");
+              playBtn?.click();
+            }
+            console.log(`[AMLL] 跳转至歌词时间点: ${targetSec.toFixed(2)}s`);
+          }
+        };
+
+        player.addEventListener("line-click", handleLineClick);
+        player.addEventListener("click", handleLineClick);
+        containerEl.addEventListener("click", (evt) => {
+          if (evt.target.closest(".FmKaba_lyricLineWrapper, .FmKaba_lyricLine")) {
+            handleLineClick(evt);
+            evt.stopPropagation();
           }
         });
       } catch (err) {
