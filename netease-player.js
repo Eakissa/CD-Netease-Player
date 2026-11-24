@@ -1969,96 +1969,129 @@ function rgbDistance(c1, c2) {
   return Math.hypot(c1[0] - c2[0], c1[1] - c2[1], c1[2] - c2[2]);
 }
 
+// 现代高级设计师调色盘库（精选 18 款高质感、高辨识度的美学互补色相组合，杜绝单调色相重复）
+const DESIGNER_PALETTES = [
+  // 1. 冰川薄荷 (Glacier Cyan & Cyber Mint)
+  { title: [56, 189, 248], currentTrack: [74, 222, 128], artist: [186, 230, 253] },
+  // 2. 珊瑚晚霞 (Coral Sunset & Golden Hour)
+  { title: [251, 146, 60], currentTrack: [250, 204, 21], artist: [254, 215, 170] },
+  // 3. 极光幻境 (Aurora Borealis)
+  { title: [52, 211, 153], currentTrack: [232, 121, 249], artist: [167, 243, 208] },
+  // 4. 幻夜霓虹 (Tokyo Cyber Night)
+  { title: [244, 63, 94], currentTrack: [6, 182, 212], artist: [253, 164, 175] },
+  // 5. 香槟流金 (Champagne & Rose Gold)
+  { title: [254, 240, 138], currentTrack: [251, 113, 133], artist: [254, 249, 195] },
+  // 6. 深空星云 (Nebula Cosmos)
+  { title: [192, 132, 252], currentTrack: [96, 165, 250], artist: [233, 213, 255] },
+  // 7. 翡翠与柑橘 (Emerald & Tangerine)
+  { title: [16, 185, 129], currentTrack: [249, 115, 22], artist: [167, 243, 208] },
+  // 8. 钛金青蓝 (Titanium Cyan)
+  { title: [34, 211, 238], currentTrack: [163, 230, 53], artist: [207, 250, 254] },
+  // 9. 复古日落 (Retro Synthwave)
+  { title: [244, 114, 182], currentTrack: [253, 224, 71], artist: [252, 231, 243] },
+  // 10. 灵动海蓝 (Bioluminescent Ocean)
+  { title: [45, 212, 191], currentTrack: [168, 85, 247], artist: [153, 246, 228] },
+  // 11. 暖阳蜜桃 (Warm Peach & Apricot)
+  { title: [251, 146, 60], currentTrack: [244, 63, 94], artist: [254, 215, 170] },
+  // 12. 幻紫电光 (Electric Violet)
+  { title: [168, 85, 247], currentTrack: [56, 189, 248], artist: [216, 180, 254] },
+  // 13. 琥珀琉璃 (Amber & Lime)
+  { title: [245, 158, 11], currentTrack: [132, 204, 22], artist: [253, 230, 138] },
+  // 14. 极光粉青 (Cyber Pastel)
+  { title: [244, 114, 182], currentTrack: [45, 212, 191], artist: [249, 168, 212] },
+  // 15. 纯澈白金 (Platinum Gold)
+  { title: [254, 240, 138], currentTrack: [56, 189, 248], artist: [255, 255, 255] },
+  // 16. 烈焰赤霞 (Solar Crimson)
+  { title: [251, 113, 133], currentTrack: [250, 204, 21], artist: [254, 205, 211] },
+  // 17. 冰海幽蓝 (Deep Ice Ultramarine)
+  { title: [147, 197, 253], currentTrack: [244, 114, 182], artist: [219, 234, 254] },
+  // 18. 晨雾柠檬 (Morning Mist Lemon)
+  { title: [250, 204, 21], currentTrack: [45, 212, 191], artist: [254, 240, 138] }
+];
+
+// 防重复历史队列，确保连续 8 首/次换曲绝对不出现重复配色
+const recentPaletteHistory = [];
+const MAX_PALETTE_HISTORY = 8;
+
+function adaptColorForBg(rgb, bgRgb, isBgDark) {
+  const [h, s, l] = rgbToHsl(rgb[0], rgb[1], rgb[2]);
+  let targetL = l;
+  if (isBgDark) {
+    // 深色背景：提升明度与鲜艳度 (68% ~ 88%)
+    targetL = Math.max(0.68, Math.min(0.88, l));
+  } else {
+    // 浅色背景：调低亮度至深沉高对比 (18% ~ 32%)
+    targetL = Math.max(0.18, Math.min(0.32, l * 0.4));
+  }
+  return hslToRgb(h, Math.min(1, s * 1.05), targetL);
+}
+
 function generateSafeRandomColors(bgRgb = [255, 255, 255]) {
   const bgLum = getRelativeLuminance(bgRgb);
-  const [bgHue, bgSat, bgLight] = rgbToHsl(bgRgb[0], bgRgb[1], bgRgb[2]);
+  const [bgHue, bgSat] = rgbToHsl(bgRgb[0], bgRgb[1], bgRgb[2]);
   const isBgDark = bgLum < 0.35;
 
-  // 现代设计师精选高质感色彩种子库 (霓虹 / 珊瑚 / 琥珀 / 极光 / 薄荷 / 冰青 / 皇家蓝 / 幻紫)
-  const baseHues = [
-    340, // 樱花粉 / Hot Pink
-    16,  // 珊瑚橘 / Sunset Coral
-    38,  // 琥珀金 / Golden Glow
-    52,  // 柠檬金 / Electric Yellow
-    145, // 极光绿 / Electric Lime
-    175, // 薄荷绿 / Cyber Mint
-    195, // 冰河青 / Electric Sky
-    215, // 蔚蓝 / Royal Azure
-    260, // 薰衣紫 / Vivid Lavender
-    285, // 幻影紫 / Deep Violet
-    310  // 霓虹洋红 / Electric Orchid
-  ];
-
-  function pickValidColor(forbiddenHues = []) {
-    let bestColor = null;
-    let bestScore = -1;
-
-    for (let attempt = 0; attempt < 32; attempt++) {
-      let h;
-      if (attempt < baseHues.length) {
-        h = baseHues[(Math.floor(Math.random() * baseHues.length) + attempt) % baseHues.length];
-      } else {
-        h = Math.floor(Math.random() * 360);
-      }
-
-      // 避免与背景色相冲突 (若背景饱和度大于 0.15)
-      if (bgSat > 0.15) {
-        const diffBg = Math.min(Math.abs(h - bgHue), 360 - Math.abs(h - bgHue));
-        if (diffBg < 35) continue;
-      }
-
-      // 避免与已有颜色色相过近
-      let hueConflict = false;
-      for (const fh of forbiddenHues) {
-        const diff = Math.min(Math.abs(h - fh), 360 - Math.abs(h - fh));
-        if (diff < 40) { hueConflict = true; break; }
-      }
-      if (hueConflict) continue;
-
-      const s = 0.76 + Math.random() * 0.22;
-      const l = isBgDark
-        ? (0.75 + Math.random() * 0.16) // 背景偏深：选用高亮鲜明通透色彩 (75%~91%)
-        : (0.20 + Math.random() * 0.16); // 背景偏浅：选用沉着饱满深色 (20%~36%)
-
-      const rgb = hslToRgb(h, s, l);
-      const contrast = getContrastRatio(rgb, bgRgb);
-      const dist = rgbDistance(rgb, bgRgb);
-
-      if (contrast < 3.8 || dist < 100) continue;
-
-      const score = contrast * 1.5 + dist * 0.05;
-      if (score > bestScore) {
-        bestScore = score;
-        bestColor = { h, s, l, rgb, contrast, dist };
-      }
+  // 1. 筛选出最近未使用的调色板候选集
+  let candidates = [];
+  for (let i = 0; i < DESIGNER_PALETTES.length; i++) {
+    if (!recentPaletteHistory.includes(i)) {
+      candidates.push(i);
     }
-
-    if (!bestColor) {
-      // 兜底高对比度
-      const fallbackL = isBgDark ? 0.90 : 0.18;
-      const rgb = hslToRgb((bgHue + 180) % 360, 0.85, fallbackL);
-      bestColor = {
-        h: (bgHue + 180) % 360,
-        s: 0.85,
-        l: fallbackL,
-        rgb,
-        contrast: getContrastRatio(rgb, bgRgb),
-        dist: rgbDistance(rgb, bgRgb)
-      };
-    }
-    return bestColor;
   }
 
-  const title = pickValidColor([]);
-  const currentTrack = pickValidColor([title.h]);
-  const artist = pickValidColor([title.h, currentTrack.h]);
+  // 若候选集耗尽则轮转释放早期历史
+  if (candidates.length === 0) {
+    recentPaletteHistory.splice(0, Math.floor(MAX_PALETTE_HISTORY / 2));
+    for (let i = 0; i < DESIGNER_PALETTES.length; i++) {
+      if (!recentPaletteHistory.includes(i)) candidates.push(i);
+    }
+  }
+
+  // 2. Fisher-Yates 随机打乱候选顺序
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+
+  // 3. 校验对比度与色相冲突，选出最佳方案
+  let chosenIndex = candidates[0];
+  let chosenPalette = DESIGNER_PALETTES[chosenIndex];
+
+  for (const idx of candidates) {
+    const pal = DESIGNER_PALETTES[idx];
+    const adaptedTitle = adaptColorForBg(pal.title, bgRgb, isBgDark);
+    const adaptedTrack = adaptColorForBg(pal.currentTrack, bgRgb, isBgDark);
+
+    const [tHue] = rgbToHsl(adaptedTitle[0], adaptedTitle[1], adaptedTitle[2]);
+    const diffHue = Math.min(Math.abs(tHue - bgHue), 360 - Math.abs(tHue - bgHue));
+
+    if (bgSat > 0.18 && diffHue < 28) continue; // 避开与背景色相冲突的脏色
+
+    const c1 = getContrastRatio(adaptedTitle, bgRgb);
+    const c2 = getContrastRatio(adaptedTrack, bgRgb);
+    if (c1 >= 3.6 && c2 >= 3.6) {
+      chosenIndex = idx;
+      chosenPalette = pal;
+      break;
+    }
+  }
+
+  // 4. 记录至防重复队列
+  recentPaletteHistory.push(chosenIndex);
+  if (recentPaletteHistory.length > MAX_PALETTE_HISTORY) {
+    recentPaletteHistory.shift();
+  }
+
+  const titleRgb = adaptColorForBg(chosenPalette.title, bgRgb, isBgDark);
+  const trackRgb = adaptColorForBg(chosenPalette.currentTrack, bgRgb, isBgDark);
+  const artistRgb = adaptColorForBg(chosenPalette.artist, bgRgb, isBgDark);
 
   return {
-    title: `rgb(${title.rgb[0]}, ${title.rgb[1]}, ${title.rgb[2]})`,
-    titleGlow: `rgba(${title.rgb[0]}, ${title.rgb[1]}, ${title.rgb[2]}, 0.35)`,
-    artist: `rgb(${artist.rgb[0]}, ${artist.rgb[1]}, ${artist.rgb[2]})`,
-    currentTrack: `rgb(${currentTrack.rgb[0]}, ${currentTrack.rgb[1]}, ${currentTrack.rgb[2]})`,
-    currentTrackGlow: `rgba(${currentTrack.rgb[0]}, ${currentTrack.rgb[1]}, ${currentTrack.rgb[2]}, 0.45)`
+    title: `rgb(${titleRgb[0]}, ${titleRgb[1]}, ${titleRgb[2]})`,
+    titleGlow: `rgba(${titleRgb[0]}, ${titleRgb[1]}, ${titleRgb[2]}, ${isBgDark ? 0.38 : 0.18})`,
+    artist: `rgb(${artistRgb[0]}, ${artistRgb[1]}, ${artistRgb[2]})`,
+    currentTrack: `rgb(${trackRgb[0]}, ${trackRgb[1]}, ${trackRgb[2]})`,
+    currentTrackGlow: `rgba(${trackRgb[0]}, ${trackRgb[1]}, ${trackRgb[2]}, ${isBgDark ? 0.48 : 0.22})`
   };
 }
 
@@ -2121,6 +2154,12 @@ function applyRandomTextColors() {
   }
 
   // 2. 设置正在播放的曲目与高亮指示器
+  document.querySelectorAll("#tracks li").forEach(li => {
+    if (!li.classList.contains("current")) {
+      li.style.color = "";
+      li.style.textShadow = "";
+    }
+  });
   const curTrackLi = document.querySelector("#tracks li.current");
   if (curTrackLi) {
     curTrackLi.style.color = colors.currentTrack;

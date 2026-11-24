@@ -1974,6 +1974,14 @@ body.lyrics-focus-mode #eq {
   visibility: hidden;
 }
 
+/* 彻底隐藏常态模式顶部时间显示（使界面更加协调纯粹） */
+#toptext {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* 左侧原曲目与专辑文字平滑淡出 */
 #left, #toptext, #footer {
   transition: filter 0.45s ease, opacity 0.45s ease, transform 0.45s ease;

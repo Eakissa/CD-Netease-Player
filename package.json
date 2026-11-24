@@ -1,6 +1,6 @@
 {
   "name": "cd-netease-player",
-  "version": "1.1.0b",
+  "version": "1.1.0c",
   "description": "3D CD 盒 × 网易云音乐 — 桌面播放器",
   "main": "main.js",
   "scripts": {

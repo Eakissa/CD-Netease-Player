@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License: GPL-3.0"></a>
-  <a href="https://github.com/Eakissa/CD-Netease-Player/releases"><img src="https://img.shields.io/badge/Version-v1.1.0b-emerald.svg" alt="Version: v1.1.0b"></a>
+  <a href="https://github.com/Eakissa/CD-Netease-Player/releases"><img src="https://img.shields.io/badge/Version-v1.1.0c-emerald.svg" alt="Version: v1.1.0c"></a>
   <img src="https://img.shields.io/badge/Electron-32-47848F.svg" alt="Electron">
   <img src="https://img.shields.io/badge/AMLL-Dynamic%20Lyrics-pink.svg" alt="AMLL">
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6.svg" alt="Platform">
