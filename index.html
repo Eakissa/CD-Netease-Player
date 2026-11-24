@@ -395,7 +395,21 @@
           </div>
         </div>
 
-        <!-- 4. 系统与控制 -->
+        <!-- 4. 键盘快捷键自定义 -->
+        <div class="ncm-misc-card" id="ncm-shortcuts-card">
+          <div class="ncm-misc-card-head-flex">
+            <h4 class="ncm-misc-card-title">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 5H4c-1.1 0-1.99.9-1.99 2L2 17c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 4H5v-2h2v2zm0-3H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 7h-2v-2h2v2zm0-3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg>
+              <span>键盘快捷键自定义</span>
+            </h4>
+            <button id="ncm-shortcuts-reset-btn" class="ncm-shortcuts-reset-btn" type="button" title="恢复默认快捷键">恢复默认</button>
+          </div>
+          <div class="ncm-shortcuts-list" id="ncm-shortcuts-list">
+            <!-- 动态渲染快捷键项 -->
+          </div>
+        </div>
+
+        <!-- 5. 系统与窗口 -->
         <div class="ncm-misc-card">
           <h4 class="ncm-misc-card-title">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
@@ -424,11 +438,11 @@
           </div>
         </div>
 
-        <!-- 5. 版本与在线更新 -->
+        <!-- 6. 版本与在线更新 -->
         <div class="ncm-misc-card">
           <div class="ncm-misc-row">
             <div class="ncm-misc-row-info">
-              <span id="ncm-misc-ver-label" class="ncm-misc-row-label">CD-Netease-Player v1.1.0</span>
+              <span id="ncm-misc-ver-label" class="ncm-misc-row-label">CD-Netease-Player v1.1.0a</span>
               <span id="ncm-misc-update-status" class="ncm-misc-row-sub">可检测 GitHub 最新版本并热更新</span>
             </div>
             <button id="ncm-misc-check-update-btn" class="ncm-btn" type="button">检查更新</button>

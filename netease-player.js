@@ -3132,8 +3132,221 @@ $("ncm-logout").onclick = async () => {
   }
 };
 
-// ===== 8. 键盘快捷键 =====
+// ===== 8. 键盘快捷键系统 (支持自定义配置与录制) =====
+const DEFAULT_SHORTCUTS = {
+  playPause: { code: "KeyP", label: "P", name: "播放 / 暂停", desc: "切换当前音乐播放或暂停状态" },
+  prevTrack: { code: "ArrowLeft", label: "←", name: "上一首曲目", desc: "切换到播放列表上一首歌曲" },
+  nextTrack: { code: "ArrowRight", label: "→", name: "下一首曲目", desc: "切换到播放列表下一首歌曲" },
+  volumeUp: { code: "ArrowUp", label: "↑", name: "增大音量", desc: "每次增加 5% 播放音量" },
+  volumeDown: { code: "ArrowDown", label: "↓", name: "减小音量", desc: "每次减小 5% 播放音量" },
+  toggleFocus: { code: "KeyF", label: "F", name: "全屏歌词聚焦", desc: "在 CD 唱片机与沉浸歌词模式间切换" },
+};
+
+function formatShortcutLabel(code, key) {
+  if (!code) return "无";
+  if (code === "Space") return "Space";
+  if (code.startsWith("Key")) return code.slice(3).toUpperCase();
+  if (code.startsWith("Digit")) return code.slice(5);
+  if (code.startsWith("Numpad")) return "Num " + code.slice(6);
+  if (code === "ArrowLeft") return "←";
+  if (code === "ArrowRight") return "→";
+  if (code === "ArrowUp") return "↑";
+  if (code === "ArrowDown") return "↓";
+  if (code === "BracketLeft") return "[";
+  if (code === "BracketRight") return "]";
+  if (code === "Minus") return "-";
+  if (code === "Equal") return "=";
+  if (code === "Backquote") return "`";
+  if (code === "Slash") return "/";
+  if (code === "Backslash") return "\\";
+  if (code === "Semicolon") return ";";
+  if (code === "Quote") return "'";
+  if (code === "Comma") return ",";
+  if (code === "Period") return ".";
+  if (code === "Enter") return "Enter";
+  if (code === "Tab") return "Tab";
+  if (code === "Backspace") return "⌫";
+  if (key && key.length === 1) return key.toUpperCase();
+  return code;
+}
+
+class ShortcutManager {
+  constructor() {
+    this.storageKey = "ncm_custom_shortcuts";
+    this.shortcuts = this.loadShortcuts();
+    this.recordingAction = null;
+    this.recordingBtn = null;
+  }
+
+  loadShortcuts() {
+    try {
+      const saved = localStorage.getItem(this.storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const merged = {};
+        for (const [key, def] of Object.entries(DEFAULT_SHORTCUTS)) {
+          merged[key] = {
+            ...def,
+            code: parsed[key]?.code || def.code,
+            label: parsed[key]?.label || def.label,
+          };
+        }
+        return merged;
+      }
+    } catch (e) {}
+    return JSON.parse(JSON.stringify(DEFAULT_SHORTCUTS));
+  }
+
+  saveShortcuts() {
+    try {
+      const toSave = {};
+      for (const [key, val] of Object.entries(this.shortcuts)) {
+        toSave[key] = { code: val.code, label: val.label };
+      }
+      localStorage.setItem(this.storageKey, JSON.stringify(toSave));
+    } catch (e) {}
+  }
+
+  resetDefaults() {
+    this.cancelRecording();
+    this.shortcuts = JSON.parse(JSON.stringify(DEFAULT_SHORTCUTS));
+    this.saveShortcuts();
+    this.renderUI();
+  }
+
+  getActionForCode(code) {
+    if (!code) return null;
+    for (const [action, item] of Object.entries(this.shortcuts)) {
+      if (item.code === code) return action;
+    }
+    return null;
+  }
+
+  startRecording(action, btnEl) {
+    if (this.recordingAction === action) {
+      this.cancelRecording();
+      return;
+    }
+    this.cancelRecording();
+    this.recordingAction = action;
+    this.recordingBtn = btnEl;
+    if (btnEl) {
+      btnEl.classList.add("is-recording");
+      btnEl.textContent = "按下按键...";
+    }
+  }
+
+  cancelRecording() {
+    if (this.recordingAction && this.recordingBtn) {
+      this.recordingBtn.classList.remove("is-recording");
+      const current = this.shortcuts[this.recordingAction];
+      this.recordingBtn.textContent = current ? current.label : "无";
+    }
+    this.recordingAction = null;
+    this.recordingBtn = null;
+  }
+
+  handleRecordingKey(e) {
+    if (!this.recordingAction) return false;
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.key === "Escape") {
+      this.cancelRecording();
+      return true;
+    }
+
+    if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) {
+      return true;
+    }
+
+    const action = this.recordingAction;
+    const code = e.code || e.key;
+    const label = formatShortcutLabel(code, e.key);
+
+    for (const [otherAction, item] of Object.entries(this.shortcuts)) {
+      if (otherAction !== action && item.code === code) {
+        item.code = this.shortcuts[action].code;
+        item.label = this.shortcuts[action].label;
+      }
+    }
+
+    this.shortcuts[action].code = code;
+    this.shortcuts[action].label = label;
+    this.saveShortcuts();
+
+    this.cancelRecording();
+    this.renderUI();
+    return true;
+  }
+
+  renderUI() {
+    const listEl = $("ncm-shortcuts-list");
+    if (!listEl) return;
+    listEl.innerHTML = "";
+
+    for (const [action, item] of Object.entries(this.shortcuts)) {
+      const row = document.createElement("div");
+      row.className = "ncm-misc-row";
+
+      const info = document.createElement("div");
+      info.className = "ncm-misc-row-info";
+
+      const label = document.createElement("span");
+      label.className = "ncm-misc-row-label";
+      label.textContent = item.name;
+
+      const sub = document.createElement("span");
+      sub.className = "ncm-misc-row-sub";
+      sub.textContent = item.desc;
+
+      info.appendChild(label);
+      info.appendChild(sub);
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ncm-shortcut-key-btn";
+      btn.dataset.action = action;
+      btn.title = `点击录制新按键 (当前: ${item.label})`;
+      btn.textContent = item.label;
+
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        this.startRecording(action, btn);
+      };
+
+      row.appendChild(info);
+      row.appendChild(btn);
+      listEl.appendChild(row);
+    }
+  }
+
+  init() {
+    this.renderUI();
+    const resetBtn = $("ncm-shortcuts-reset-btn");
+    if (resetBtn) {
+      resetBtn.onclick = () => {
+        this.resetDefaults();
+      };
+    }
+
+    document.addEventListener("click", (e) => {
+      if (this.recordingAction && !e.target.closest(".ncm-shortcut-key-btn")) {
+        this.cancelRecording();
+      }
+    });
+  }
+}
+
+const shortcutManager = new ShortcutManager();
+shortcutManager.init();
+
 document.addEventListener("keydown", (e) => {
+  if (shortcutManager.recordingAction) {
+    shortcutManager.handleRecordingKey(e);
+    return;
+  }
+
   if ($("ncm-settings").open || queueDialog.open) return;
   if (e.key === "Escape") {
     if (!contextMenu?.hidden) {
@@ -3156,29 +3369,32 @@ document.addEventListener("keydown", (e) => {
       return;
     }
   }
-  // 排除输入框、下拉框或弹出层激活状态，但允许在普通按钮获得焦点时按空格播放/暂停
+  // 排除输入框、下拉框或弹出层激活状态
   if (e.target.closest?.("input, select, textarea, [contenteditable]") || !$("ncm-qr-modal").classList.contains("hidden")) return;
-  switch (e.code) {
-    case "Space":
-      e.preventDefault();
-      togglePlayPause();
-      break;
-    case "ArrowRight":
-      e.preventDefault();
-      playNextTrack();
-      break;
-    case "ArrowLeft":
-      e.preventDefault();
-      playPrevTrack();
-      break;
-    case "ArrowUp":
-      e.preventDefault();
-      setPlayerVolume(audio.volume + 0.05, true);
-      break;
-    case "ArrowDown":
-      e.preventDefault();
-      setPlayerVolume(audio.volume - 0.05, true);
-      break;
+
+  const action = shortcutManager.getActionForCode(e.code);
+  if (action) {
+    e.preventDefault();
+    switch (action) {
+      case "playPause":
+        togglePlayPause();
+        break;
+      case "nextTrack":
+        playNextTrack();
+        break;
+      case "prevTrack":
+        playPrevTrack();
+        break;
+      case "volumeUp":
+        setPlayerVolume(audio.volume + 0.05, true);
+        break;
+      case "volumeDown":
+        setPlayerVolume(audio.volume - 0.05, true);
+        break;
+      case "toggleFocus":
+        setFocusMode();
+        break;
+    }
   }
 });
 

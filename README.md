@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License: GPL-3.0"></a>
-  <a href="https://github.com/Eakissa/CD-Netease-Player/releases"><img src="https://img.shields.io/badge/Version-v1.1.0-emerald.svg" alt="Version: v1.1.0"></a>
+  <a href="https://github.com/Eakissa/CD-Netease-Player/releases"><img src="https://img.shields.io/badge/Version-v1.1.0a-emerald.svg" alt="Version: v1.1.0a"></a>
   <img src="https://img.shields.io/badge/Electron-32-47848F.svg" alt="Electron">
   <img src="https://img.shields.io/badge/AMLL-Dynamic%20Lyrics-pink.svg" alt="AMLL">
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6.svg" alt="Platform">
@@ -30,6 +30,56 @@
   （4K 视网膜全景液态流动流光 · 巨幅专辑封面与播控 · AMLL 官方原生逐字流光歌词与悬浮胶囊高亮 · 歌词行点击毫秒级跳转）</p>
   <img src="screenshots/preview-focus-mode.jpg" alt="CD Netease Player 歌词聚焦模式预览" width="88%" style="border-radius: 12px; box-shadow: 0 10px 36px rgba(0,0,0,0.55);" />
 </div>
+
+---
+
+## 🚀 下载安装与运行指引 (Installation Guide)
+
+### 1. ⭐ 初始安装推荐：下载 v1.1.0 基底完整便携版
+> [!IMPORTANT]
+> **新用户初次体验，强烈推荐下载 `v1.1.0` 完整便携包作为基底版本（Base Version）！**
+> 
+> 👉 前往下载：**[v1.1.0 稳定便携版 (CD-Netease-Player-v1.1.0-win-x64.zip)](https://github.com/Eakissa/CD-Netease-Player/releases/tag/v1.1.0)**
+> 
+> 下载后解压到任意目录，双击 `CD Netease Player.exe` 即可直接免安装运行！
+
+### 2. ⚡ 极速小更新机制（告别 130MB 大包）
+后续版本日常功能迭代、微调与修复（如 `v1.1.0a`、`v1.1.0b` 等 mini update）**无需再重复下载 130MB 的完整大包**，Release 仅发布微补丁件：
+- **微补丁极速热更（仅几十 KB）**：打开播放器「右侧抽屉 → 杂项菜单 → 点击【检查更新】」，系统会自动拉取补丁并一秒热更新完成！
+- **向下无缝兼容**：以 `v1.1.0` 为统一基底，无论是从 `1.1.0` 直接升级到最新小版本，还是从 `1.1.0a` 升至后续版本，均支持一键直达与一键无损回滚。
+
+### 3. 从源码运行与开发
+```bash
+# 1. 克隆仓库
+git clone https://github.com/Eakissa/CD-Netease-Player.git
+cd CD-Netease-Player
+
+# 2. 安装依赖并启动
+npm install
+npm start
+
+# 3. 构建更新件（默认构建 mini 更新件，加参数可全量打包）
+npm run build
+```
+
+---
+
+## ⌨️ 键盘快捷键（支持完全自定义）
+
+> [!TIP]
+> **在「右侧抽屉 → 杂项设置 → 键盘快捷键」中，点击对应键位胶囊即可自由按下按键重新录制绑定！** 随时支持点击「恢复默认」。
+
+| 功能操作 | 默认按键 | 说明 |
+| :--- | :---: | :--- |
+| **播放 / 暂停** | <kbd>P</kbd> | **默认暂停/播放按键（已升级为 P 键，可自定义）** |
+| **上一首曲目** | <kbd>←</kbd> | 切换至播放列表上一首歌曲 |
+| **下一首曲目** | <kbd>→</kbd> | 切换至播放列表下一首歌曲 |
+| **增大音量 (+5%)** | <kbd>↑</kbd> | 增加 5% 音量，伴随屏幕顶部毛玻璃 HUD 提示 |
+| **减小音量 (-5%)** | <kbd>↓</kbd> | 减小 5% 音量，伴随屏幕顶部毛玻璃 HUD 提示 |
+| **全屏沉浸歌词聚焦** | <kbd>F</kbd> | 在 3D CD 唱片机模式与 AMLL 全屏流光歌词间切换 |
+| **退出 / 返回** | <kbd>Esc</kbd> | 退出聚焦模式 / 关闭专辑详情 / 收起右侧抽屉 |
+| **3D CD 物理自旋** | `鼠标滚轮` | 在 3D CD 盒表面滚动，带角动量阻尼与惯性甩盘 |
+| **CD 盒快速回正** | `滚轮中键` | 鼠标中键单击唱片机平滑回正三维角度 |
 
 ---
 
@@ -100,56 +150,6 @@
    - 若国内网络连接较慢，可勾选「使用国内镜像加速下载」
 5. 如需恢复到纯净初始基底，在弹窗中点击「回退至原始基底版本」即可
 ```
-
----
-
-## 🚀 快速上手与运行
-
-### 方式一：直接下载开箱即用（推荐）
-前往 [GitHub Releases](https://github.com/Eakissa/CD-Netease-Player/releases/latest) 下载最新的 **`CD-Netease-Player-v*-win-x64.zip`**，解压后双击 `CD Netease Player.exe` 即可启动。
-
-### 方式二：从源码运行与构建
-
-#### 运行环境
-- Node.js (推荐 Node.js 18 ~ 22)
-- Windows 10 / 11
-
-#### 1. 克隆仓库并安装依赖
-```bash
-git clone https://github.com/Eakissa/CD-Netease-Player.git
-cd CD-Netease-Player
-npm install
-```
-
-#### 2. 启动开发模式
-```bash
-npm start
-```
-
-#### 3. 自动打包（生成绿色版、微补丁与全量 Zip 包）
-```bash
-npm run build
-```
-打包脚本将自动在 `dist/` 目录下生成：
-- `patch-v*.zip`（轻量微补丁包）
-- `app-update.zip`（核心 app.asar 更新包）
-- `CD-Netease-Player-v*-win-x64.zip`（完整独立便携免安装包）
-
----
-
-## ⌨️ 常用快捷键
-
-| 按键 | 功能 |
-| :--- | :--- |
-| `空格 (Space)` | 播放 / 暂停 |
-| `→` / `Ctrl + →` | 下一首 |
-| `←` / `Ctrl + ←` | 上一首（播放时间 > 3 秒时跳至开头，否则切上一首） |
-| `Shift + →` | 快进 5 秒 |
-| `Shift + ←` | 快退 5 秒 |
-| `↑` / `↓` | 调节音量（伴随悬浮 HUD 提示） |
-| `Esc` | 退出聚焦模式 / 返回全部专辑 / 收起抽屉或选单 |
-| `鼠标滚轮` | 在 3D CD 盒上滚动可自旋唱片机（带惯性物理阻尼） |
-| `鼠标滚轮中键` | 单击平滑回正 3D CD 盒角度 |
 
 ---
 

@@ -14,15 +14,42 @@ const { patchManager } = require("./patch-manager");
 const baseAppDir = global.__baseAppDir || __dirname;
 const currentAppVersion = require("./package.json").version || "1.0.3";
 
+function parseVersionTokens(ver) {
+  const str = (ver || "").replace(/^v/i, "").trim();
+  const parts = str.split(/[.\-_]/);
+  const tokens = [];
+  for (const part of parts) {
+    const match = part.match(/^(\d*)([a-zA-Z]*)$/);
+    if (match) {
+      if (match[1]) tokens.push(parseInt(match[1], 10));
+      if (match[2]) tokens.push(match[2].toLowerCase());
+    } else {
+      const num = parseInt(part, 10);
+      tokens.push(isNaN(num) ? part.toLowerCase() : num);
+    }
+  }
+  return tokens;
+}
+
 function compareVersions(v1, v2) {
-  const p1 = (v1 || "").replace(/^v/i, "").split(".").map(n => parseInt(n, 10) || 0);
-  const p2 = (v2 || "").replace(/^v/i, "").split(".").map(n => parseInt(n, 10) || 0);
-  const len = Math.max(p1.length, p2.length);
+  const t1 = parseVersionTokens(v1);
+  const t2 = parseVersionTokens(v2);
+  const len = Math.max(t1.length, t2.length);
   for (let i = 0; i < len; i++) {
-    const num1 = p1[i] || 0;
-    const num2 = p2[i] || 0;
-    if (num1 > num2) return 1;
-    if (num1 < num2) return -1;
+    const a = t1[i];
+    const b = t2[i];
+    if (a === undefined && b === undefined) return 0;
+    if (a === undefined) return -1;
+    if (b === undefined) return 1;
+    if (typeof a === "number" && typeof b === "number") {
+      if (a > b) return 1;
+      if (a < b) return -1;
+    } else {
+      const sa = String(a);
+      const sb = String(b);
+      const cmp = sa.localeCompare(sb);
+      if (cmp !== 0) return cmp > 0 ? 1 : -1;
+    }
   }
   return 0;
 }

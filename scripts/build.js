@@ -79,14 +79,19 @@ fs.rmSync(stagingDir, { recursive: true, force: true });
 // 5. Create release zip package and update packages
 const zipPath = path.join(distBase, `CD-Netease-Player-v${version}-win-x64.zip`);
 const sevenZipPath = path.join(sourceDir, 'node_modules/7zip-bin/win/x64/7za.exe');
+const isMini = process.argv.includes('--mini') || /[a-zA-Z]/.test(version);
 
 if (fs.existsSync(sevenZipPath)) {
-  console.log('5. Creating portable release zip package...');
-  if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
-  execSync(`"${sevenZipPath}" a -tzip -mx=7 "${zipPath}" "${distAppDir}/*"`, { stdio: 'inherit' });
-  const zipSize = fs.statSync(zipPath).size;
-  console.log('📦 Zip package size:', (zipSize / (1024 * 1024)).toFixed(2), 'MB');
-  console.log('📍 Zip saved to:', zipPath);
+  if (!isMini) {
+    console.log('5. Creating portable release zip package...');
+    if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+    execSync(`"${sevenZipPath}" a -tzip -mx=7 "${zipPath}" "${distAppDir}/*"`, { stdio: 'inherit' });
+    const zipSize = fs.statSync(zipPath).size;
+    console.log('📦 Zip package size:', (zipSize / (1024 * 1024)).toFixed(2), 'MB');
+    console.log('📍 Zip saved to:', zipPath);
+  } else {
+    console.log('⚡ Mini update mode active: Skipping large full release zip (~130MB), focusing on update artifacts!');
+  }
 
   // 6. Create lightweight in-app update package (app-update.zip - Tier 2 Core)
   const updateZipPath = path.join(distBase, 'app-update.zip');
@@ -130,7 +135,7 @@ if (fs.existsSync(sevenZipPath)) {
   const manifest = {
     name: 'cd-netease-player-patch',
     version: version,
-    minBaseVersion: '1.0.3',
+    minBaseVersion: '1.1.0',
     files: patchFiles,
     builtAt: Date.now()
   };
