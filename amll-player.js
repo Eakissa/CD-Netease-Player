@@ -30,43 +30,130 @@
         containerEl.innerHTML = "";
         containerEl.appendChild(el);
 
-        // 点击歌词行跳转播放进度 (支持 AMLL 原生 line-click、标准 click 与 DOM 委托)
-        const handleLineClick = (evt) => {
-          let targetSec = null;
-          if (evt.line && typeof evt.line.startTime === "number") {
-            targetSec = evt.line.startTime / 1000;
-          } else if (typeof evt.lineIndex === "number" && currentLines && currentLines[evt.lineIndex]) {
-            const line = currentLines[evt.lineIndex];
-            if (typeof line.startTime === "number") {
-              targetSec = line.startTime / 1000;
+        // 提取歌词目标跳转时间（单位：秒）
+        const extractTargetSec = (evt) => {
+          // 1. 从 AMLL 原生 Sx 事件 line 属性 (Ax 渲染器) 提取
+          if (evt && evt.line) {
+            const l = typeof evt.line.getLine === "function" ? evt.line.getLine() : (evt.line.lyricLine || evt.line);
+            if (l && typeof l.startTime === "number" && l.startTime >= 0) {
+              return l.startTime / 1000;
             }
           }
-          if (targetSec === null && evt.target && evt.target.closest) {
-            const wrapper = evt.target.closest(".FmKaba_lyricLineWrapper");
-            if (wrapper && player && player.lyricGroupElementMap) {
-              const grp = player.lyricGroupElementMap.get(wrapper);
-              if (grp && grp.mainLine && typeof grp.mainLine.startTime === "number") {
-                targetSec = grp.mainLine.startTime / 1000;
+          // 2. 从 lineIndex 提取
+          if (evt && typeof evt.lineIndex === "number" && evt.lineIndex >= 0) {
+            if (player && player.processedLines && player.processedLines[evt.lineIndex]) {
+              const pl = player.processedLines[evt.lineIndex];
+              if (typeof pl.startTime === "number") return pl.startTime / 1000;
+            }
+            if (currentLines && currentLines[evt.lineIndex]) {
+              const cl = currentLines[evt.lineIndex];
+              if (typeof cl.startTime === "number") return cl.startTime / 1000;
+            }
+          }
+          // 3. 从 DOM 元素查找最近的 .FmKaba_lyricLineWrapper
+          const target = (evt && evt.target) ? evt.target : null;
+          if (target && target.closest) {
+            const wrapper = target.closest(".FmKaba_lyricLineWrapper");
+            if (wrapper && player) {
+              if (player.lyricGroupElementMap && player.lyricGroupElementMap.has(wrapper)) {
+                const grp = player.lyricGroupElementMap.get(wrapper);
+                if (grp) {
+                  const grpLine = typeof grp.mainLine?.getLine === "function" ? grp.mainLine.getLine() : (grp.mainLine?.lyricLine || grp.mainLine);
+                  if (grpLine && typeof grpLine.startTime === "number") {
+                    return grpLine.startTime / 1000;
+                  }
+                  if (typeof grp.startTime === "number") {
+                    return grp.startTime / 1000;
+                  }
+                }
+              }
+              if (player.currentLyricGroups && Array.isArray(player.currentLyricGroups)) {
+                const found = player.currentLyricGroups.find(g => g.element === wrapper);
+                if (found) {
+                  const fLine = typeof found.mainLine?.getLine === "function" ? found.mainLine.getLine() : (found.mainLine?.lyricLine || found.mainLine);
+                  if (fLine && typeof fLine.startTime === "number") {
+                    return fLine.startTime / 1000;
+                  }
+                }
+              }
+              // 文本匹配兜底
+              const txt = wrapper.innerText?.trim();
+              if (txt && currentLines && currentLines.length) {
+                const matched = currentLines.find(l => {
+                  const lText = l.words ? l.words.map(w => w.word).join("").trim() : (l.text || "");
+                  return lText && (txt.includes(lText) || lText.includes(txt));
+                });
+                if (matched && typeof matched.startTime === "number") {
+                  return matched.startTime / 1000;
+                }
               }
             }
           }
-          if (targetSec !== null && targetSec >= 0 && audioEl) {
-            audioEl.currentTime = targetSec;
-            seek(targetSec);
-            if (audioEl.paused) {
-              const playBtn = document.getElementById("ncm-play");
-              playBtn?.click();
+          return null;
+        };
+
+        // 执行跳转与进度同步
+        const executeSeekToSec = (targetSec) => {
+          if (targetSec === null || typeof targetSec !== "number" || isNaN(targetSec) || targetSec < 0) return;
+          if (!audioEl) audioEl = document.getElementById("ncm-audio");
+          if (!audioEl) return;
+
+          console.log(`[AMLL] 精准跳转至歌词时间点: ${targetSec.toFixed(2)}s`);
+          audioEl.currentTime = targetSec;
+          seek(targetSec);
+
+          if (audioEl.paused) {
+            const playPromise = audioEl.play();
+            if (playPromise !== undefined) {
+              playPromise.catch(() => {
+                const playBtn = document.getElementById("ncm-play");
+                playBtn?.click();
+              });
             }
-            console.log(`[AMLL] 跳转至歌词时间点: ${targetSec.toFixed(2)}s`);
+          }
+
+          // 同步更新悬浮底栏与聚焦视图进度与时间
+          const curEl = document.getElementById("ncm-time-cur");
+          const focusCurEl = document.getElementById("amll-focus-time-cur");
+          const m = Math.floor(targetSec / 60);
+          const s = Math.floor(targetSec % 60);
+          const timeStr = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+          if (curEl) curEl.textContent = timeStr;
+          if (focusCurEl) focusCurEl.textContent = timeStr;
+
+          if (audioEl.duration && !isNaN(audioEl.duration) && audioEl.duration > 0) {
+            const pct = Math.min(100, Math.max(0, (targetSec / audioEl.duration) * 100));
+            const prog = document.getElementById("ncm-progress");
+            const fprog = document.getElementById("amll-focus-progress");
+            if (prog) {
+              prog.value = pct;
+              prog.style.setProperty("--progress-pct", pct + "%");
+            }
+            if (fprog) {
+              fprog.value = pct;
+              fprog.style.setProperty("--progress-pct", pct + "%");
+            }
           }
         };
 
-        player.addEventListener("line-click", handleLineClick);
-        player.addEventListener("click", handleLineClick);
+        player.addEventListener("line-click", (evt) => {
+          const sec = extractTargetSec(evt);
+          if (sec !== null) executeSeekToSec(sec);
+        });
+        player.addEventListener("click", (evt) => {
+          const sec = extractTargetSec(evt);
+          if (sec !== null) executeSeekToSec(sec);
+        });
         containerEl.addEventListener("click", (evt) => {
-          if (evt.target.closest(".FmKaba_lyricLineWrapper, .FmKaba_lyricLine")) {
-            handleLineClick(evt);
-            evt.stopPropagation();
+          // 仅在聚焦模式下响应歌词点击跳转
+          if (!document.body.classList.contains("lyrics-focus-mode")) return;
+          const wrapper = evt.target.closest?.(".FmKaba_lyricLineWrapper, .FmKaba_lyricLine");
+          if (wrapper) {
+            const sec = extractTargetSec(evt);
+            if (sec !== null) {
+              executeSeekToSec(sec);
+              evt.stopPropagation();
+            }
           }
         });
       } catch (err) {

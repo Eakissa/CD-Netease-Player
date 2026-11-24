@@ -2105,13 +2105,13 @@ body.lyrics-focus-mode #ncm-left-edge-strip:hover:not(.strip-idle)::before {
 #amll-focus-title {
   font-size: clamp(22px, 2.5vw, 32px);
   font-weight: 700;
-  color: var(--focus-title-color, #ffffff);
+  color: #ffffff;
   line-height: 1.25;
   letter-spacing: -0.4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-shadow: var(--focus-title-shadow, 0 4px 16px rgba(0, 0, 0, 0.7));
+  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
   transition: color 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), text-shadow 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -2119,7 +2119,7 @@ body.lyrics-focus-mode #ncm-left-edge-strip:hover:not(.strip-idle)::before {
   margin-top: 8px;
   font-size: clamp(15px, 1.4vw, 18px);
   font-weight: 500;
-  color: var(--focus-artist-color, rgba(255, 255, 255, 0.85));
+  color: rgba(255, 255, 255, 0.85);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2130,7 +2130,7 @@ body.lyrics-focus-mode #ncm-left-edge-strip:hover:not(.strip-idle)::before {
 #amll-focus-album {
   margin-top: 4px;
   font-size: clamp(13px, 1.1vw, 15px);
-  color: var(--focus-album-color, rgba(255, 255, 255, 0.65));
+  color: rgba(255, 255, 255, 0.65);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2168,36 +2168,20 @@ body.lyrics-focus-mode #amll-container {
   text-rendering: optimizeLegibility;
   cursor: default;
   pointer-events: auto !important;
+  z-index: 22 !important;
 }
 
 body.lyrics-focus-mode #amll-container * {
   pointer-events: auto;
 }
 
-/* 聚焦模式歌词行：Apple Music 风格的悬浮淡颜色圆角方框高亮与点击反馈 */
+/* 聚焦模式歌词交互：完全还原 AMLL 官方原生悬浮质感与点击手势 */
 body.lyrics-focus-mode .FmKaba_lyricLineWrapper {
   cursor: pointer !important;
-  border-radius: 14px !important;
-  padding: 0.32em 0.85em !important;
-  margin-left: -0.85em !important;
-  margin-right: -0.85em !important;
-  transition: background-color 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
-              box-shadow 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
-              transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
 }
 
-body.lyrics-focus-mode .FmKaba_lyricLineWrapper:hover {
-  background-color: rgba(255, 255, 255, 0.12) !important;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
-    0 4px 18px rgba(0, 0, 0, 0.22) !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-body.lyrics-focus-mode .FmKaba_lyricLineWrapper:active {
-  background-color: rgba(255, 255, 255, 0.22) !important;
-  transform: scale(0.99) !important;
+body.lyrics-focus-mode .amll-lyric-player {
+  --amll-lp-hover-bg-color: rgba(255, 255, 255, 0.10);
 }
 
 /* Apple Music 歌词高亮与通透质感：采用标准 Alpha 混合，杜绝加色滤镜导致的字符毛刺与过曝死白 */
@@ -2715,9 +2699,12 @@ body.bg-dual-accent #bg .right {
     radial-gradient(ellipse 50% 70% at 70% 45%, rgba(255, 255, 255, 0.16), transparent 70%),
     linear-gradient(160deg, var(--bg-accent-2, var(--accent)) 0%, var(--bg-accent-2-dark, var(--accent-dark)) 100%) !important;
 }
-body.bg-dual-accent #left #title {
-  color: #ffffff !important;
-  text-shadow: 0 0.3vh 1.6vh rgba(0, 0, 0, 0.55), 0 0 24px var(--accent-glow) !important;
+body.bg-dual-accent #left #title,
+body.bg-monochrome #left #title,
+#left #title {
+  color: var(--album-dynamic-color, #ffffff) !important;
+  text-shadow: var(--album-dynamic-shadow, 0 0.3vh 1.6vh rgba(0, 0, 0, 0.55)) !important;
+  transition: color 0.4s ease, text-shadow 0.4s ease;
 }
 
 /* 极简灰阶模式 (Monochrome) */
@@ -2732,21 +2719,34 @@ body.bg-monochrome #bg .right {
     radial-gradient(ellipse 50% 70% at 70% 45%, rgba(255, 255, 255, 0.08), transparent 70%),
     linear-gradient(160deg, #151820 0%, #0d0f14 100%) !important;
 }
-body.bg-monochrome #left #title {
-  color: #ffffff !important;
-  text-shadow: 0 0.3vh 1.6vh rgba(0, 0, 0, 0.65) !important;
-}
-body.bg-dual-accent #left #note {
-  color: rgba(255, 255, 255, 0.9) !important;
+
+body.bg-dual-accent #left #note,
+body.bg-monochrome #left #note,
+#left #note {
+  color: var(--artist-dynamic-color, rgba(255, 255, 255, 0.85)) !important;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45) !important;
+  transition: color 0.4s ease;
 }
-body.bg-dual-accent #left #tracks li {
-  color: rgba(255, 255, 255, 0.72) !important;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4) !important;
+
+#left #tracks li {
+  transition: color 0.3s ease;
 }
-body.bg-dual-accent #left #tracks li.current {
-  color: #ffffff !important;
-  text-shadow: 0 0 12px rgba(255, 255, 255, 0.55) !important;
+
+body.bg-dual-accent #left #tracks li.current,
+body.bg-monochrome #left #tracks li.current,
+#left #tracks li.current {
+  color: var(--current-track-dynamic-color, #ffffff) !important;
+  font-weight: 600;
+  text-shadow: 0 0 12px var(--current-track-dynamic-glow, rgba(255, 255, 255, 0.55)) !important;
+  transition: color 0.35s ease, text-shadow 0.35s ease;
+}
+
+body.bg-dual-accent #marker,
+body.bg-monochrome #marker,
+#marker {
+  background: var(--current-track-dynamic-color, #ffffff) !important;
+  box-shadow: 0 0 0.8vh var(--current-track-dynamic-glow, rgba(255, 255, 255, 0.55)) !important;
+  transition: background 0.35s ease, box-shadow 0.35s ease;
 }
 
 /* ===== 版本更新检测与弹窗样式 ===== */

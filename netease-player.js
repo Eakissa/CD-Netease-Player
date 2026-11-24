@@ -1970,27 +1970,31 @@ function rgbDistance(c1, c2) {
   return Math.hypot(c1[0] - c2[0], c1[1] - c2[1], c1[2] - c2[2]);
 }
 
-function generateSafeRandomColors(bgRgb = [10, 12, 18]) {
-  const isBgDark = getRelativeLuminance(bgRgb) < 0.25;
+function generateSafeRandomColors(bgRgb = [255, 255, 255]) {
+  const bgLum = getRelativeLuminance(bgRgb);
+  const [bgHue, bgSat, bgLight] = rgbToHsl(bgRgb[0], bgRgb[1], bgRgb[2]);
+  const isBgDark = bgLum < 0.35;
 
-  // 现代设计师精选高质感色彩种子库 (霓虹 / 冰晶 / 柔光 / 糖果粉 / 幻影青)
+  // 现代设计师精选高质感色彩种子库 (霓虹 / 珊瑚 / 琥珀 / 极光 / 薄荷 / 冰青 / 皇家蓝 / 幻紫)
   const baseHues = [
     340, // 樱花粉 / Hot Pink
-    15,  // 珊瑚橘 / Sunset Coral
-    40,  // 琥珀金 / Golden Glow
-    85,  // 极光绿 / Electric Lime
-    165, // 薄荷绿 / Cyber Mint
+    16,  // 珊瑚橘 / Sunset Coral
+    38,  // 琥珀金 / Golden Glow
+    52,  // 柠檬金 / Electric Yellow
+    145, // 极光绿 / Electric Lime
+    175, // 薄荷绿 / Cyber Mint
     195, // 冰河青 / Electric Sky
-    225, // 佩利蓝 / Royal Azure
-    265, // 薰衣紫 / Vivid Lavender
+    215, // 蔚蓝 / Royal Azure
+    260, // 薰衣紫 / Vivid Lavender
+    285, // 幻影紫 / Deep Violet
     310  // 霓虹洋红 / Electric Orchid
   ];
 
-  function pickValidColor(forbiddenHue = -1) {
+  function pickValidColor(forbiddenHues = []) {
     let bestColor = null;
     let bestScore = -1;
 
-    for (let attempt = 0; attempt < 18; attempt++) {
+    for (let attempt = 0; attempt < 32; attempt++) {
       let h;
       if (attempt < baseHues.length) {
         h = baseHues[(Math.floor(Math.random() * baseHues.length) + attempt) % baseHues.length];
@@ -1998,79 +2002,150 @@ function generateSafeRandomColors(bgRgb = [10, 12, 18]) {
         h = Math.floor(Math.random() * 360);
       }
 
-      if (forbiddenHue >= 0) {
-        const diff = Math.min(Math.abs(h - forbiddenHue), 360 - Math.abs(h - forbiddenHue));
-        if (diff < 45) continue;
+      // 避免与背景色相冲突 (若背景饱和度大于 0.15)
+      if (bgSat > 0.15) {
+        const diffBg = Math.min(Math.abs(h - bgHue), 360 - Math.abs(h - bgHue));
+        if (diffBg < 35) continue;
       }
 
-      const s = 0.80 + Math.random() * 0.18;
+      // 避免与已有颜色色相过近
+      let hueConflict = false;
+      for (const fh of forbiddenHues) {
+        const diff = Math.min(Math.abs(h - fh), 360 - Math.abs(h - fh));
+        if (diff < 40) { hueConflict = true; break; }
+      }
+      if (hueConflict) continue;
+
+      const s = 0.76 + Math.random() * 0.22;
       const l = isBgDark
-        ? (0.72 + Math.random() * 0.14) // 暗色背景下：72% ~ 86% 高亮通透纯净色彩
-        : (0.22 + Math.random() * 0.12); // 浅色背景下：22% ~ 34% 沉着饱满深色
+        ? (0.75 + Math.random() * 0.16) // 背景偏深：选用高亮鲜明通透色彩 (75%~91%)
+        : (0.20 + Math.random() * 0.16); // 背景偏浅：选用沉着饱满深色 (20%~36%)
 
       const rgb = hslToRgb(h, s, l);
       const contrast = getContrastRatio(rgb, bgRgb);
       const dist = rgbDistance(rgb, bgRgb);
 
-      if (contrast >= 4.5 && dist >= 85) {
-        return { h, s, l, rgb, contrast, dist };
-      }
+      if (contrast < 3.8 || dist < 100) continue;
 
-      if (contrast * dist > bestScore) {
-        bestScore = contrast * dist;
+      const score = contrast * 1.5 + dist * 0.05;
+      if (score > bestScore) {
+        bestScore = score;
         bestColor = { h, s, l, rgb, contrast, dist };
       }
     }
-    return bestColor || { h: 180, s: 0.9, l: 0.8, rgb: hslToRgb(180, 0.9, 0.8) };
+
+    if (!bestColor) {
+      // 兜底高对比度
+      const fallbackL = isBgDark ? 0.90 : 0.18;
+      const rgb = hslToRgb((bgHue + 180) % 360, 0.85, fallbackL);
+      bestColor = {
+        h: (bgHue + 180) % 360,
+        s: 0.85,
+        l: fallbackL,
+        rgb,
+        contrast: getContrastRatio(rgb, bgRgb),
+        dist: rgbDistance(rgb, bgRgb)
+      };
+    }
+    return bestColor;
   }
 
-  const title = pickValidColor();
-  const album = pickValidColor(title.h);
-  const artistL = isBgDark ? Math.max(0.60, title.l - 0.12) : Math.min(0.38, title.l + 0.12);
-  const artistRgb = hslToRgb(title.h, title.s * 0.65, artistL);
+  const title = pickValidColor([]);
+  const currentTrack = pickValidColor([title.h]);
+  const artist = pickValidColor([title.h, currentTrack.h]);
 
   return {
     title: `rgb(${title.rgb[0]}, ${title.rgb[1]}, ${title.rgb[2]})`,
     titleGlow: `rgba(${title.rgb[0]}, ${title.rgb[1]}, ${title.rgb[2]}, 0.35)`,
-    album: `rgb(${album.rgb[0]}, ${album.rgb[1]}, ${album.rgb[2]})`,
-    artist: `rgb(${artistRgb[0]}, ${artistRgb[1]}, ${artistRgb[2]})`
+    artist: `rgb(${artist.rgb[0]}, ${artist.rgb[1]}, ${artist.rgb[2]})`,
+    currentTrack: `rgb(${currentTrack.rgb[0]}, ${currentTrack.rgb[1]}, ${currentTrack.rgb[2]})`,
+    currentTrackGlow: `rgba(${currentTrack.rgb[0]}, ${currentTrack.rgb[1]}, ${currentTrack.rgb[2]}, 0.45)`
   };
 }
 
-function applyRandomTextColors() {
-  const root = document.documentElement;
-  const currentAccent = root.style.getPropertyValue("--bg-accent-1");
-  let bgRgb = [10, 12, 18];
-  if (currentAccent && currentAccent.startsWith("rgb(")) {
-    const m = currentAccent.match(/\d+/g);
-    if (m && m.length >= 3) {
-      bgRgb = [
-        Math.round(10 * 0.65 + parseInt(m[0], 10) * 0.35),
-        Math.round(12 * 0.65 + parseInt(m[1], 10) * 0.35),
-        Math.round(18 * 0.65 + parseInt(m[2], 10) * 0.35)
-      ];
+function getLeftPanelBgRgb() {
+  if (document.body.classList.contains("bg-monochrome")) {
+    return [26, 30, 37];
+  }
+  if (document.body.classList.contains("bg-dual-accent")) {
+    const val = getComputedStyle(document.documentElement).getPropertyValue("--bg-accent-1")?.trim();
+    if (val && val.startsWith("rgb")) {
+      const m = val.match(/\d+/g);
+      if (m && m.length >= 3) return [parseInt(m[0], 10), parseInt(m[1], 10), parseInt(m[2], 10)];
     }
   }
+  const lightVal = getComputedStyle(document.documentElement).getPropertyValue("--light")?.trim();
+  if (lightVal) {
+    if (lightVal.startsWith("#")) {
+      const hex = lightVal.slice(1);
+      if (hex.length === 3) {
+        return [parseInt(hex[0] + hex[0], 16), parseInt(hex[1] + hex[1], 16), parseInt(hex[2] + hex[2], 16)];
+      } else if (hex.length >= 6) {
+        return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+      }
+    } else if (lightVal.startsWith("rgb")) {
+      const m = lightVal.match(/\d+/g);
+      if (m && m.length >= 3) return [parseInt(m[0], 10), parseInt(m[1], 10), parseInt(m[2], 10)];
+    }
+  }
+  const bgLeft = document.querySelector("#bg .left");
+  if (bgLeft) {
+    const c = getComputedStyle(bgLeft).backgroundColor;
+    if (c && c.startsWith("rgb")) {
+      const m = c.match(/\d+/g);
+      if (m && m.length >= 3) return [parseInt(m[0], 10), parseInt(m[1], 10), parseInt(m[2], 10)];
+    }
+  }
+  return [245, 245, 247];
+}
 
+function applyRandomTextColors() {
+  const bgRgb = getLeftPanelBgRgb();
   const colors = generateSafeRandomColors(bgRgb);
-  root.style.setProperty("--focus-title-color", colors.title);
-  root.style.setProperty("--focus-title-shadow", `0 2px 14px ${colors.titleGlow}, 0 1px 4px rgba(0, 0, 0, 0.75)`);
-  root.style.setProperty("--focus-album-color", colors.album);
-  root.style.setProperty("--focus-artist-color", colors.artist);
 
-  const titleEl = $("amll-focus-title");
-  const albumEl = $("amll-focus-album");
-  const artistEl = $("amll-focus-artist");
+  const root = document.documentElement;
+  root.style.setProperty("--album-dynamic-color", colors.title);
+  root.style.setProperty("--album-dynamic-shadow", `0 2px 14px ${colors.titleGlow}, 0 1px 4px rgba(0, 0, 0, 0.45)`);
+  root.style.setProperty("--artist-dynamic-color", colors.artist);
+  root.style.setProperty("--current-track-dynamic-color", colors.currentTrack);
+  root.style.setProperty("--current-track-dynamic-glow", colors.currentTrackGlow);
 
+  // 1. 设置非聚焦模式左侧专辑名与艺术家
+  const titleEl = $("title");
+  const noteEl = $("note");
   if (titleEl) {
     titleEl.style.color = colors.title;
-    titleEl.style.textShadow = `0 2px 14px ${colors.titleGlow}, 0 1px 4px rgba(0, 0, 0, 0.75)`;
+    titleEl.style.textShadow = `0 2px 14px ${colors.titleGlow}, 0 1px 4px rgba(0, 0, 0, 0.45)`;
   }
-  if (albumEl) {
-    albumEl.style.color = colors.album;
+  if (noteEl) {
+    noteEl.style.color = colors.artist;
   }
-  if (artistEl) {
-    artistEl.style.color = colors.artist;
+
+  // 2. 设置正在播放的曲目与高亮指示器
+  const curTrackLi = document.querySelector("#tracks li.current");
+  if (curTrackLi) {
+    curTrackLi.style.color = colors.currentTrack;
+    curTrackLi.style.textShadow = `0 0 12px ${colors.currentTrackGlow}`;
+  }
+  const marker = $("marker");
+  if (marker) {
+    marker.style.background = colors.currentTrack;
+    marker.style.boxShadow = `0 0 0.8vh ${colors.currentTrackGlow}`;
+  }
+
+  // 3. 聚焦模式下的标题和信息保持纯白通透高雅，不应用随机颜色
+  const focusTitle = $("amll-focus-title");
+  const focusAlbum = $("amll-focus-album");
+  const focusArtist = $("amll-focus-artist");
+  if (focusTitle) {
+    focusTitle.style.color = "#ffffff";
+    focusTitle.style.textShadow = "0 4px 16px rgba(0, 0, 0, 0.7)";
+  }
+  if (focusAlbum) {
+    focusAlbum.style.color = "rgba(255, 255, 255, 0.65)";
+  }
+  if (focusArtist) {
+    focusArtist.style.color = "rgba(255, 255, 255, 0.85)";
   }
 }
 window.refreshTitleRandomColors = applyRandomTextColors;
@@ -3316,6 +3391,7 @@ function applyDualAccentColors(rgb1, rgb2) {
   root.style.setProperty("--accent-dark", c1Dark);
   root.style.setProperty("--accent-soft", `rgba(${rgb1[0]}, ${rgb1[1]}, ${rgb1[2]}, 0.4)`);
   root.style.setProperty("--accent-glow", `rgba(${rgb1[0]}, ${rgb1[1]}, ${rgb1[2]}, 0.25)`);
+  applyRandomTextColors();
 }
 
 let colorExtractionGen = 0;
@@ -3465,6 +3541,7 @@ function applyBgColorMode(mode) {
   localStorage.setItem("ncm_bg_color_mode", mode);
   document.body.classList.toggle("bg-dual-accent", mode === "dual-accent");
   document.body.classList.toggle("bg-monochrome", mode === "monochrome");
+  applyRandomTextColors();
 }
 applyBgColorMode(bgColorMode);
 
