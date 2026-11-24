@@ -1570,7 +1570,7 @@ updateOrderButtonUI(orderControl.value, false);
 // 悬停展开式音量胶囊一键静音/恢复
 const volumeBtn = $("ncm-volume-btn");
 const volumeInput = $("ncm-volume");
-let lastVolume = 0.7;
+let lastVolume = 0.05; // 默认安全恢复音量为 5% (0.05)，防止满音量轰炸耳朵
 
 function updateVolumeIcon(vol) {
   const waves = volumeBtn?.querySelector(".volume-waves");
@@ -1578,29 +1578,28 @@ function updateVolumeIcon(vol) {
     waves.style.display = vol <= 0.01 ? "none" : "";
   }
   if (volumeBtn) {
-    volumeBtn.title = vol <= 0.01 ? "点击取消静音" : `音量: ${Math.round(vol * 100)}% (点击静音)`;
+    volumeBtn.title = vol <= 0.01 ? "点击取消静音 (恢复音量)" : `音量: ${Math.round(vol * 100)}% (点击静音)`;
   }
 }
 
 if (volumeBtn && volumeInput) {
   volumeBtn.onclick = (e) => {
     e.stopPropagation();
-    const cur = parseFloat(volumeInput.value);
+    const cur = audio.volume;
     if (cur > 0.01) {
       lastVolume = cur;
-      volumeInput.value = 0;
+      setPlayerVolume(0, true);
     } else {
-      volumeInput.value = lastVolume > 0.01 ? lastVolume : 0.7;
+      // 再次点击取消静音：安全恢复音量，若前次音量过高 (>=0.95) 或无有效记录则默认恢复为 5% (0.05)
+      const restoreVol = (lastVolume > 0.01 && lastVolume < 0.95) ? lastVolume : 0.05;
+      setPlayerVolume(restoreVol, true);
     }
-    updateVolumeIcon(parseFloat(volumeInput.value));
-    updateSlider(volumeInput, parseFloat(volumeInput.value) * 100);
-    audio.volume = parseFloat(volumeInput.value);
   };
 
   volumeInput.addEventListener("input", () => {
-    updateVolumeIcon(parseFloat(volumeInput.value));
+    setPlayerVolume(parseFloat(volumeInput.value), false);
   });
-  updateVolumeIcon(parseFloat(volumeInput.value || 0.7));
+  updateVolumeIcon(parseFloat(volumeInput.value || 0.05));
 }
 
 // 底部曲目微卡片点击切换聚焦模式
@@ -2503,7 +2502,7 @@ function showVolumeToast(percent) {
   const toast = $("ncm-volume-toast");
   const text = $("ncm-volume-toast-text");
   if (!toast || !text) return;
-  text.textContent = `音量 ${percent}%`;
+  text.textContent = percent === 0 ? "已静音" : `音量 ${percent}%`;
   toast.hidden = false;
   clearTimeout(volumeToastTimer);
   volumeToastTimer = setTimeout(() => {
@@ -2519,6 +2518,7 @@ function setPlayerVolume(val, showToast = false) {
     volSlider.value = clamped;
     updateSlider(volSlider, clamped);
   }
+  updateVolumeIcon(clamped);
   try {
     localStorage.setItem("ncm_volume", String(clamped));
   } catch (err) {}
@@ -2530,7 +2530,10 @@ function setPlayerVolume(val, showToast = false) {
 const savedVolStr = localStorage.getItem("ncm_volume");
 const initVol = (savedVolStr !== null && !isNaN(Number(savedVolStr)))
   ? Math.max(0, Math.min(1, Number(savedVolStr)))
-  : 0.7;
+  : 0.05;
+if (initVol > 0.01 && initVol < 0.95) {
+  lastVolume = initVol;
+}
 setPlayerVolume(initVol, false);
 
 $("ncm-volume").oninput = (e) => {
