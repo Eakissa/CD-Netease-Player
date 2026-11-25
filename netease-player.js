@@ -1595,7 +1595,7 @@ function replaceTrackRows(list, songs, indices) {
     addPlBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/></svg>';
     addPlBtn.onclick = (e) => {
       e.stopPropagation();
-      openAddToPlaylistModal([song]);
+      openAddToPlaylistModal([song], addPlBtn);
     };
 
     actions.append(likeBtn, addPlBtn);
@@ -4650,65 +4650,90 @@ function positionAnchoredPopover(dialogEl, anchor, preferAbove = false) {
   if (!dialogEl) return;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const pad = 12;
+  const pad = 14;
   const gap = 10;
 
+  let aLeft = vw / 2;
+  let aRight = vw / 2;
   let ax = vw / 2;
   let ayTop = vh / 2;
   let ayBottom = vh / 2;
+  let hasAnchor = false;
 
   if (anchor && typeof anchor.getBoundingClientRect === "function") {
     const r = anchor.getBoundingClientRect();
     if (r.width > 0 || r.height > 0) {
+      aLeft = r.left;
+      aRight = r.right;
       ax = r.left + r.width / 2;
       ayTop = r.top;
       ayBottom = r.bottom;
+      hasAnchor = true;
     }
   } else if (anchor && typeof anchor.x === "number" && typeof anchor.y === "number") {
+    aLeft = anchor.x;
+    aRight = anchor.x;
     ax = anchor.x;
     ayTop = anchor.y;
     ayBottom = anchor.y;
+    hasAnchor = true;
   }
 
-  // 先打开以获取真实渲染尺寸
+  // 先打开并暂停动画以读取未缩放的真实布局尺寸
   dialogEl.classList.remove("is-closing");
-  dialogEl.style.left = "-9999px";
-  dialogEl.style.top = "-9999px";
+  dialogEl.style.animation = "none";
+  dialogEl.style.left = "0px";
+  dialogEl.style.top = "0px";
   if (!dialogEl.open) dialogEl.showModal();
 
-  const rect = dialogEl.getBoundingClientRect();
-  const w = rect.width || 360;
-  const h = rect.height || 320;
+  const w = dialogEl.offsetWidth || 350;
+  const h = dialogEl.offsetHeight || 320;
 
-  let left = ax - w / 2;
-  left = Math.max(pad, Math.min(vw - w - pad, left));
-
-  const spaceAbove = ayTop - pad - gap;
-  const spaceBelow = vh - ayBottom - pad - gap;
-
+  let left;
   let top;
   let placement;
+
   if (preferAbove) {
+    // 例如底栏随机偏好按钮：优先正上方居中弹出
+    left = ax - w / 2;
+    const spaceAbove = ayTop - pad - gap;
+    const spaceBelow = vh - ayBottom - pad - gap;
     if (spaceAbove >= h || spaceAbove >= spaceBelow) {
-      top = Math.max(pad, ayTop - h - gap);
+      top = ayTop - h - gap;
       placement = "above";
     } else {
-      top = Math.min(vh - h - pad, ayBottom + gap);
+      top = ayBottom + gap;
       placement = "below";
     }
+  } else if (hasAnchor && ax > vw * 0.55) {
+    // 锚点位于窗口右侧（例如播放列表 / 右侧抽屉内）：优先在按钮左侧紧贴弹出，不遮挡列表且不超界
+    left = aLeft - w - gap;
+    if (left < pad) left = ax - w / 2;
+    top = ayTop - 24;
+    placement = "below";
   } else {
+    left = ax - w / 2;
+    const spaceBelow = vh - ayBottom - pad - gap;
+    const spaceAbove = ayTop - pad - gap;
     if (spaceBelow >= h || spaceBelow >= spaceAbove) {
-      top = Math.min(vh - h - pad, ayBottom + gap);
+      top = ayBottom + gap;
       placement = "below";
     } else {
-      top = Math.max(pad, ayTop - h - gap);
+      top = ayTop - h - gap;
       placement = "above";
     }
   }
+
+  // 严格钳制在程序视框安全区内，绝不超出四边
+  left = Math.max(pad, Math.min(vw - w - pad, left));
+  top = Math.max(pad, Math.min(vh - h - pad, top));
 
   dialogEl.dataset.placement = placement;
   dialogEl.style.left = `${Math.round(left)}px`;
   dialogEl.style.top = `${Math.round(top)}px`;
+  // 重新触发弹性进场动画
+  void dialogEl.offsetWidth;
+  dialogEl.style.animation = "";
 }
 
 let pendingAddSongs = [];
