@@ -3171,6 +3171,686 @@ body.bg-monochrome #marker,
   cursor: not-allowed;
 }
 
+/* =========================================================================
+   v1.1.0c 新增：智能随机 2D 偏好矩阵、推荐中心、红心喜欢、歌单管理与批量多选
+   ========================================================================= */
+
+/* 适配 4 个抽屉标签的紧凑排布 */
+.ncm-drawer-tab {
+  padding: 6px 11px !important;
+  font-size: 12.5px !important;
+  white-space: nowrap;
+}
+
+/* 迷你按钮通用样式 */
+.ncm-btn-xs {
+  padding: 4px 10px !important;
+  font-size: 11.5px !important;
+  border-radius: 7px !important;
+  line-height: 1.3;
+}
+
+/* 红心喜欢按钮 */
+.ncm-like-btn {
+  color: rgba(255, 255, 255, 0.65);
+  transition: color 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ncm-like-btn:hover {
+  color: #ff6b81;
+  transform: scale(1.1);
+}
+.ncm-like-btn.liked {
+  color: #ff4757 !important;
+}
+.ncm-like-btn.liked svg {
+  fill: #ff4757;
+  filter: drop-shadow(0 0 6px rgba(255, 71, 87, 0.55));
+}
+.ncm-like-btn.heart-pop {
+  animation: ncmHeartPop 0.35s cubic-bezier(0.17, 0.89, 0.32, 1.49);
+}
+@keyframes ncmHeartPop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
+/* 私人漫游不喜欢按钮 */
+.ncm-fm-trash-btn {
+  color: rgba(255, 255, 255, 0.55);
+}
+.ncm-fm-trash-btn:hover {
+  color: #ff6b6b !important;
+}
+
+/* 队列标题行与模式徽标 */
+.ncm-queue-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ncm-queue-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+}
+.ncm-queue-mode-badge.is-heartbeat {
+  background: linear-gradient(135deg, #f43f5e, #ec4899);
+  box-shadow: 0 2px 8px rgba(244, 63, 94, 0.35);
+}
+.ncm-queue-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 曲目行内置快捷操作（红心 + 加入歌单） */
+.ncm-track {
+  position: relative;
+}
+.ncm-track-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding-left: 6px;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  flex-shrink: 0;
+}
+.ncm-track:hover .ncm-track-inline-actions,
+.ncm-track[aria-current="true"] .ncm-track-inline-actions,
+.ncm-track-inline-actions.has-liked {
+  opacity: 1;
+}
+.ncm-row-action-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.ncm-row-action-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+.ncm-row-action-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  transform: scale(1.08);
+}
+.ncm-row-action-btn.liked {
+  color: #ff4757 !important;
+}
+
+/* 歌单手风琴头部批量选择按钮 */
+.ncm-pl-batch-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.72);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-right: 4px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.ncm-pl-batch-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+.ncm-pl-batch-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+/* 批量多选模式复选框与底部悬浮操作栏 */
+.ncm-batch-check {
+  display: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+  transition: all 0.15s ease;
+}
+.ncm-batch-check svg {
+  width: 11px;
+  height: 11px;
+  fill: #fff;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: all 0.15s ease;
+}
+.is-batch-mode .ncm-batch-check {
+  display: inline-flex;
+}
+.is-batch-mode .ncm-track-number {
+  display: none;
+}
+.ncm-track.batch-selected {
+  background: rgba(59, 130, 246, 0.16) !important;
+  border-color: rgba(59, 130, 246, 0.35) !important;
+}
+.ncm-track.batch-selected .ncm-batch-check {
+  background: #3b82f6;
+  border-color: #60a5fa;
+}
+.ncm-track.batch-selected .ncm-batch-check svg {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.ncm-batch-bar {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(20, 24, 34, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
+}
+.ncm-batch-bar[hidden] {
+  display: none !important;
+}
+.ncm-batch-info {
+  font-size: 13px;
+  font-weight: 600;
+  color: #93c5fd;
+}
+.ncm-batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* =========================================================================
+   推荐中心视图 (每日推荐 / 心动模式 / 私人漫游 / 私人雷达)
+   ========================================================================= */
+.ncm-rec-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 2px 18px;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+.ncm-rec-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ncm-rec-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.ncm-rec-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.32);
+}
+.ncm-rec-card.active-mode {
+  border-color: rgba(96, 165, 250, 0.75);
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.35), 0 8px 22px rgba(59, 130, 246, 0.22);
+}
+.ncm-rec-daily {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.24), rgba(239, 68, 68, 0.12));
+}
+.ncm-rec-heartbeat {
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.26), rgba(236, 72, 153, 0.12));
+}
+.ncm-rec-fm {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.26), rgba(99, 102, 241, 0.12));
+}
+.ncm-rec-radar {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.24), rgba(6, 182, 212, 0.12));
+}
+.ncm-rec-card-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.ncm-rec-card-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+.ncm-rec-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.ncm-rec-card-text strong {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #fff;
+}
+.ncm-rec-card-text span {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* 私人漫游模式条 */
+.ncm-fm-modes-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ncm-fm-modes-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+}
+.ncm-fm-mode-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.ncm-fm-pill {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.ncm-fm-pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+.ncm-fm-pill.active {
+  background: rgba(59, 130, 246, 0.28);
+  border-color: rgba(96, 165, 250, 0.65);
+  color: #bfdbfe;
+  font-weight: 600;
+}
+
+/* 推荐曲目与漫游历史区 */
+.ncm-rec-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+.ncm-rec-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ncm-rec-list-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ncm-rec-subtab {
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.ncm-rec-subtab:hover {
+  color: rgba(255, 255, 255, 0.85);
+}
+.ncm-rec-subtab.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+.ncm-rec-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* =========================================================================
+   智能随机播放偏好 2D 坐标矩阵弹窗（复刻网易云移动端质感）
+   ========================================================================= */
+.ncm-shuffle-pref-modal {
+  padding: 0;
+  border: none;
+  border-radius: 26px;
+  background: transparent;
+  color: #fff;
+  max-width: 440px;
+  width: 92vw;
+  overflow: visible;
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.65);
+}
+.ncm-shuffle-pref-modal::backdrop {
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(8px);
+}
+.ncm-shuffle-pad-shell {
+  background: radial-gradient(ellipse at 50% 45%, rgba(44, 46, 52, 0.96), rgba(22, 24, 28, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 26px;
+  padding: 18px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  user-select: none;
+}
+.ncm-shuffle-pad-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+.ncm-shuffle-pad-subtitle {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.ncm-shuffle-live-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7cb4ff;
+  background: rgba(93, 156, 255, 0.14);
+  border: 1px solid rgba(93, 156, 255, 0.28);
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+.ncm-shuffle-pad-stage {
+  position: relative;
+  height: 270px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ncm-axis-label {
+  position: absolute;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  z-index: 3;
+}
+.ncm-axis-top { top: 4px; left: 50%; transform: translateX(-50%); }
+.ncm-axis-bottom { bottom: 4px; left: 50%; transform: translateX(-50%); }
+.ncm-axis-left { left: 4px; top: 50%; transform: translateY(-50%); }
+.ncm-axis-right { right: 4px; top: 50%; transform: translateY(-50%); }
+
+.ncm-shuffle-grid {
+  position: relative;
+  width: 224px;
+  height: 196px;
+  cursor: crosshair;
+  touch-action: none;
+  border-radius: 16px;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.11) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.11) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: center center;
+  -webkit-mask-image: radial-gradient(ellipse 68% 68% at 50% 50%, #000 55%, rgba(0, 0, 0, 0.25) 85%, transparent 100%);
+  mask-image: radial-gradient(ellipse 68% 68% at 50% 50%, #000 55%, rgba(0, 0, 0, 0.25) 85%, transparent 100%);
+}
+/* 让圆点不受 mask 裁剪：使用独立定位层时保持可见，这里用更宽 mask 保证边缘圆点清晰 */
+.ncm-shuffle-grid {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.ncm-shuffle-grid::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.11) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.11) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: center center;
+  -webkit-mask-image: radial-gradient(ellipse 62% 62% at 50% 50%, #000 45%, rgba(0, 0, 0, 0.2) 82%, transparent 100%);
+  mask-image: radial-gradient(ellipse 62% 62% at 50% 50%, #000 45%, rgba(0, 0, 0, 0.2) 82%, transparent 100%);
+}
+.ncm-shuffle-grid {
+  background-image: none;
+}
+.ncm-shuffle-puck {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(93, 156, 255, 0.26);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  transition: transform 0.12s ease, background 0.15s ease;
+  z-index: 4;
+}
+.ncm-shuffle-puck.dragging {
+  cursor: grabbing;
+  background: rgba(93, 156, 255, 0.38);
+  transform: translate(-50%, -50%) scale(1.1);
+}
+.ncm-shuffle-puck-core {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #5b9dff;
+  box-shadow: 0 0 14px rgba(91, 157, 255, 0.75);
+}
+.ncm-shuffle-pad-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+.ncm-shuffle-pill-btn {
+  padding: 7px 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.ncm-shuffle-pill-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+.ncm-shuffle-pill-primary {
+  border-color: rgba(91, 157, 255, 0.45);
+  background: rgba(91, 157, 255, 0.18);
+  color: #dbeafe;
+}
+.ncm-shuffle-pill-primary:hover {
+  background: rgba(91, 157, 255, 0.34);
+  color: #fff;
+}
+.ncm-shuffle-reset-link {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.ncm-shuffle-reset-link:hover {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* =========================================================================
+   收藏到目标歌单弹窗
+   ========================================================================= */
+.ncm-add-playlist-modal {
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 18px;
+  background: rgba(22, 26, 36, 0.96);
+  backdrop-filter: blur(24px);
+  color: #fff;
+  width: 400px;
+  max-width: 92vw;
+  max-height: 76vh;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+.ncm-add-playlist-modal::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+}
+.ncm-add-pl-body {
+  padding: 12px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ncm-add-pl-create-row {
+  display: flex;
+  gap: 8px;
+}
+.ncm-add-pl-create-row input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 9px;
+  padding: 7px 11px;
+  color: #fff;
+  font-size: 13px;
+  outline: none;
+}
+.ncm-add-pl-create-row input:focus {
+  border-color: #60a5fa;
+  background: rgba(255, 255, 255, 0.1);
+}
+.ncm-add-pl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 46vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+.ncm-add-pl-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+.ncm-add-pl-item:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.ncm-add-pl-item img {
+  width: 38px;
+  height: 38px;
+  border-radius: 7px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.ncm-add-pl-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ncm-add-pl-meta strong {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ncm-add-pl-meta span {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+
 
 
 

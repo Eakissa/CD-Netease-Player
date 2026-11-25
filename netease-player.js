@@ -180,17 +180,64 @@ function showPlayerToast(msg) {
 }
 
 // ===== 歌单与专辑状态与高速缓存 =====
+let currentUserId = null;
 let userPlaylists = [];
 const playlistTracksCache = new Map();
 let userAlbums = [];
 const albumTracksCache = new Map();
-let currentActiveDrawerTab = "playlists"; // "playlists" | "albums"
+let currentActiveDrawerTab = "playlists"; // "playlists" | "recommend" | "albums" | "misc"
+
+// ===== 红心、流式电台、智能随机偏好与批量管理全局状态 =====
+const likedSongIds = new Set();
+const userPlayCountMap = new Map();
+const songGenreCache = new Map();
+let playStreamMode = "normal"; // "normal" | "fm" | "heartbeat"
+let currentFmMode = { mode: "DEFAULT", subMode: "" };
+let fmFetchingMore = false;
+let streamHistory = [];
+try {
+  const savedHist = JSON.parse(localStorage.getItem("ncm_stream_history") || "[]");
+  if (Array.isArray(savedHist)) streamHistory = savedHist.slice(0, 120);
+} catch (e) {}
+try {
+  const savedLocalPlays = JSON.parse(localStorage.getItem("ncm_local_play_counts") || "{}");
+  for (const [id, cnt] of Object.entries(savedLocalPlays)) {
+    userPlayCountMap.set(String(id), Number(cnt) || 0);
+  }
+} catch (e) {}
+try {
+  const savedGenres = JSON.parse(localStorage.getItem("ncm_song_genre_cache") || "{}");
+  for (const [id, g] of Object.entries(savedGenres)) {
+    if (g) songGenreCache.set(String(id), g);
+  }
+} catch (e) {}
+
+let shufflePref = { freq: 0, style: 0 };
+try {
+  const sp = JSON.parse(localStorage.getItem("ncm_shuffle_pref") || "null");
+  if (sp && typeof sp.freq === "number" && typeof sp.style === "number") {
+    shufflePref = {
+      freq: Math.max(-1, Math.min(1, sp.freq)),
+      style: Math.max(-1, Math.min(1, sp.style)),
+    };
+  }
+} catch (e) {}
+
+const batchState = {
+  active: false,
+  containerEl: null,
+  songs: [],
+  selectedIds: new Set(),
+};
 
 // ===== 自定义毛玻璃右键上下文菜单 =====
 let contextMenuTargetSong = null;
 const contextMenu = $("ncm-context-menu");
 const ctxPlayBtn = $("ncm-ctx-play");
 const ctxPlayNextBtn = $("ncm-ctx-play-next");
+const ctxLikeBtn = $("ncm-ctx-like");
+const ctxLikeText = $("ncm-ctx-like-text");
+const ctxAddPlaylistBtn = $("ncm-ctx-add-playlist");
 const ctxArtistBtn = $("ncm-ctx-artist");
 
 function hideContextMenu() {
@@ -207,11 +254,14 @@ function showContextMenu(e, song) {
   e.preventDefault();
   e.stopPropagation();
   contextMenuTargetSong = song;
+  if (ctxLikeText) {
+    ctxLikeText.textContent = likedSongIds.has(String(song.id)) ? "取消红心" : "红心喜欢";
+  }
   contextMenu.hidden = false;
   contextMenu.style.display = "flex";
 
-  const menuWidth = 215;
-  const menuHeight = 130;
+  const menuWidth = 225;
+  const menuHeight = 200;
   const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10);
   const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10);
   contextMenu.style.left = `${Math.max(10, x)}px`;
@@ -253,6 +303,24 @@ if (ctxPlayNextBtn) {
   };
 }
 
+if (ctxLikeBtn) {
+  ctxLikeBtn.onclick = () => {
+    if (!contextMenuTargetSong) return;
+    const song = contextMenuTargetSong;
+    hideContextMenu();
+    toggleSongLike(song);
+  };
+}
+
+if (ctxAddPlaylistBtn) {
+  ctxAddPlaylistBtn.onclick = () => {
+    if (!contextMenuTargetSong) return;
+    const song = contextMenuTargetSong;
+    hideContextMenu();
+    openAddToPlaylistModal([song]);
+  };
+}
+
 if (ctxArtistBtn) {
   ctxArtistBtn.onclick = () => {
     if (!contextMenuTargetSong) return;
@@ -281,13 +349,17 @@ document.addEventListener("contextmenu", (e) => {
 window.addEventListener("blur", hideContextMenu);
 window.addEventListener("resize", hideContextMenu);
 
-// 通用曲目行 DOM 构造函数
+// 通用曲目行 DOM 构造函数（支持批量多选复选框、红心喜欢与快捷加入歌单）
 function createTrackRow(song, position, onPlayClick) {
   const row = document.createElement("li");
   const button = document.createElement("button");
   button.type = "button";
   button.className = "ncm-track";
   button.dataset.songId = song.id;
+
+  const checkBox = document.createElement("span");
+  checkBox.className = "ncm-batch-check";
+  checkBox.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
 
   const number = document.createElement("span");
   number.className = "ncm-track-number";
@@ -302,6 +374,7 @@ function createTrackRow(song, position, onPlayClick) {
   artist.textContent = (song.ar || []).map(item => item.name).join(" / ");
   artist.title = artist.textContent ? `查看歌手: ${artist.textContent}` : "";
   artist.onclick = (e) => {
+    if (batchState.active) return;
     e.stopPropagation();
     const aId = song.ar?.[0]?.id;
     const aName = song.ar?.[0]?.name;
@@ -309,10 +382,43 @@ function createTrackRow(song, position, onPlayClick) {
   };
   button.title = artist.textContent ? `${song.name} - ${artist.textContent}` : song.name;
   info.append(title, artist);
-  button.append(number, info);
+
+  const actions = document.createElement("span");
+  const isLiked = likedSongIds.has(String(song.id));
+  actions.className = `ncm-track-inline-actions${isLiked ? " has-liked" : ""}`;
+
+  const likeBtn = document.createElement("span");
+  likeBtn.className = `ncm-row-action-btn ncm-inline-like${isLiked ? " liked" : ""}`;
+  likeBtn.dataset.likeSongId = String(song.id);
+  likeBtn.title = isLiked ? "取消红心" : "红心喜欢";
+  likeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>';
+  likeBtn.onclick = (e) => {
+    e.stopPropagation();
+    toggleSongLike(song);
+  };
+
+  const addPlBtn = document.createElement("span");
+  addPlBtn.className = "ncm-row-action-btn";
+  addPlBtn.title = "收藏到歌单";
+  addPlBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/></svg>';
+  addPlBtn.onclick = (e) => {
+    e.stopPropagation();
+    openAddToPlaylistModal([song]);
+  };
+
+  actions.append(likeBtn, addPlBtn);
+  button.append(checkBox, number, info, actions);
+
+  if (batchState.active && batchState.selectedIds.has(String(song.id))) {
+    button.classList.add("batch-selected");
+  }
 
   button.onclick = (e) => {
     e.stopPropagation();
+    if (batchState.active && batchState.containerEl && batchState.containerEl.contains(row)) {
+      toggleBatchSelection(song.id, button);
+      return;
+    }
     onPlayClick(song);
   };
 
@@ -360,8 +466,13 @@ async function initSession() {
       return;
     }
 
+    currentUserId = profile.userId;
     $("ncm-user").textContent = profile.nickname;
     $("ncm-btn-login").textContent = "切换账号";
+
+    // 异步拉取红心列表与个人听歌播放次数（供智能随机偏好使用）
+    loadUserLikedSongs(profile.userId);
+    loadUserPlayCounts(profile.userId);
 
     const miscAvatar = $("ncm-misc-avatar");
     const miscAvatarFallback = $("ncm-misc-avatar-fallback");
@@ -468,6 +579,13 @@ function renderPlaylistAccordion() {
     countEl.textContent = `${pl.trackCount} 首`;
     info.append(nameEl, countEl);
 
+    // 批量管理多选按钮
+    const batchBtn = document.createElement("button");
+    batchBtn.type = "button";
+    batchBtn.className = "ncm-pl-batch-btn";
+    batchBtn.title = `批量选择《${pl.name}》中的歌曲加入其他歌单`;
+    batchBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18 7l-1.41-1.41-6.34 6.34 1.41 1.41L18 7zm4.24-1.41L11.66 16.17 7.48 12l-1.41 1.41L11.66 19l12-12-1.42-1.41zM.41 13.41L6 19l1.41-1.41L1.83 12 .41 13.41z"/></svg>';
+
     // 快速开始播放按钮（将歌单加入播放列表并立即开始从头播放）
     const quickPlayBtn = document.createElement("button");
     quickPlayBtn.type = "button";
@@ -489,6 +607,7 @@ function renderPlaylistAccordion() {
           showPlayerToast("歌单内暂无曲目");
           return;
         }
+        setPlayStreamMode("normal");
         tracks = songs;
         queueTracks = songs;
         queueName = pl.name;
@@ -538,11 +657,24 @@ function renderPlaylistAccordion() {
     chevron.className = "ncm-pl-chevron";
     chevron.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>';
 
-    header.append(cover, info, quickPlayBtn, chevron);
+    header.append(cover, info, batchBtn, quickPlayBtn, chevron);
 
     const body = document.createElement("div");
     body.className = "ncm-accordion-body";
     body.hidden = true;
+
+    batchBtn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!item.classList.contains("open")) {
+        await header.onclick();
+      }
+      const loadedSongs = playlistTracksCache.get(pl.id) || [];
+      if (!loadedSongs.length) {
+        showPlayerToast("歌单暂无可选择的曲目");
+        return;
+      }
+      enterBatchMode(body, loadedSongs);
+    };
 
     // 点击 Header 切换展开/折叠
     header.onclick = async () => {
@@ -581,11 +713,12 @@ function renderPlaylistAccordion() {
               songBatch.forEach((song, i) => {
                 const sIdx = startIdx + i;
                 const row = createTrackRow(song, sIdx, () => {
+                  setPlayStreamMode("normal");
                   tracks = loadedSongs;
                   queueTracks = loadedSongs;
                   queueName = pl.name;
                   rebuildQueueOrder(sIdx);
-  savePlaybackState();
+                  savePlaybackState();
                   playTrack(sIdx);
                 });
                 frag.appendChild(row);
@@ -838,6 +971,8 @@ function closeArtistDetail() {
     if (albumDetailView) albumDetailView.hidden = false;
   } else if (previousDrawerTabOrView === "search") {
     if (searchView) searchView.hidden = false;
+  } else if (previousDrawerTabOrView === "recommend") {
+    if (recommendView) recommendView.hidden = false;
   } else if (previousDrawerTabOrView === "albums") {
     if (albumsView) albumsView.hidden = false;
   } else if (previousDrawerTabOrView === "misc") {
@@ -850,11 +985,14 @@ function closeArtistDetail() {
 if (artistBackBtn) artistBackBtn.onclick = closeArtistDetail;
 
 function closeAlbumDetail() {
+  exitBatchMode();
   if (albumDetailView) albumDetailView.hidden = true;
   if (currentActiveAlbumSource === "artist" && currentActiveArtist) {
     if (artistView) artistView.hidden = false;
   } else if (currentActiveDrawerTab === "playlists") {
     if (playlistsView) playlistsView.hidden = false;
+  } else if (currentActiveDrawerTab === "recommend") {
+    if (recommendView) recommendView.hidden = false;
   } else if (currentActiveDrawerTab === "misc") {
     if (miscView) miscView.hidden = false;
   } else {
@@ -868,6 +1006,20 @@ if (albumDetailBackBtn) {
   albumDetailBackBtn.onclick = closeAlbumDetail;
 }
 
+const albumDetailBatchBtn = $("ncm-album-detail-batch");
+if (albumDetailBatchBtn) {
+  albumDetailBatchBtn.onclick = () => {
+    if (!currentActiveAlbum) return;
+    const songs = albumTracksCache.get(currentActiveAlbum.id) || [];
+    const listEl = $("ncm-album-detail-track-list");
+    if (!songs.length || !listEl) {
+      showPlayerToast("专辑曲目尚未加载完成");
+      return;
+    }
+    enterBatchMode(listEl, songs);
+  };
+}
+
 async function openAlbumDetail(album, source = null) {
   if (!album || !albumDetailView) return;
   currentActiveAlbum = album;
@@ -875,6 +1027,7 @@ async function openAlbumDetail(album, source = null) {
 
   if (albumsView) albumsView.hidden = true;
   if (playlistsView) playlistsView.hidden = true;
+  if (recommendView) recommendView.hidden = true;
   if (searchView) searchView.hidden = true;
   if (artistView) artistView.hidden = true;
   if (miscView) miscView.hidden = true;
@@ -1202,6 +1355,7 @@ const searchInput = $("ncm-drawer-search");
 const searchClearBtn = $("ncm-drawer-search-clear");
 const searchView = $("ncm-search-view");
 const playlistsView = $("ncm-playlists-view");
+const recommendView = $("ncm-recommend-view");
 const albumsView = $("ncm-albums-view");
 const miscView = $("ncm-misc-view");
 const searchSummary = $("ncm-search-summary");
@@ -1214,24 +1368,16 @@ function performDrawerSearch(keyword) {
     if (searchView) searchView.hidden = true;
     if (albumDetailView) albumDetailView.hidden = true;
     if (artistView) artistView.hidden = true;
-    if (currentActiveDrawerTab === "playlists") {
-      if (playlistsView) playlistsView.hidden = false;
-      if (albumsView) albumsView.hidden = true;
-      if (miscView) miscView.hidden = true;
-    } else if (currentActiveDrawerTab === "misc") {
-      if (playlistsView) playlistsView.hidden = true;
-      if (albumsView) albumsView.hidden = true;
-      if (miscView) miscView.hidden = false;
-    } else {
-      if (playlistsView) playlistsView.hidden = true;
-      if (albumsView) albumsView.hidden = false;
-      if (miscView) miscView.hidden = true;
-    }
+    if (playlistsView) playlistsView.hidden = currentActiveDrawerTab !== "playlists";
+    if (recommendView) recommendView.hidden = currentActiveDrawerTab !== "recommend";
+    if (albumsView) albumsView.hidden = currentActiveDrawerTab !== "albums";
+    if (miscView) miscView.hidden = currentActiveDrawerTab !== "misc";
     return;
   }
 
   if (searchClearBtn) searchClearBtn.hidden = false;
   if (playlistsView) playlistsView.hidden = true;
+  if (recommendView) recommendView.hidden = true;
   if (albumsView) albumsView.hidden = true;
   if (albumDetailView) albumDetailView.hidden = true;
   if (artistView) artistView.hidden = true;
@@ -1307,6 +1453,7 @@ if (searchClearBtn) {
 
 // ===== 3.4 抽屉顶部标签切换（我的歌单 / 收藏专辑 / 杂项） =====
 const tabPlaylists = $("ncm-tab-playlists");
+const tabRecommend = $("ncm-tab-recommend");
 const tabAlbums = $("ncm-tab-albums");
 const tabMisc = $("ncm-tab-misc");
 
@@ -1338,65 +1485,48 @@ function syncMiscViewValues() {
 
 function switchDrawerTab(tab) {
   currentActiveDrawerTab = tab;
+  exitBatchMode();
   closeAlbumDetail();
   closeArtistDetail();
 
   const searchWrap = document.querySelector(".ncm-drawer-search-wrap");
+  const allTabs = [
+    ["playlists", tabPlaylists],
+    ["recommend", tabRecommend],
+    ["albums", tabAlbums],
+    ["misc", tabMisc],
+  ];
+  for (const [key, btn] of allTabs) {
+    if (!btn) continue;
+    const isAct = key === tab;
+    btn.classList.toggle("active", isAct);
+    btn.setAttribute("aria-selected", isAct ? "true" : "false");
+  }
 
-  if (tab === "playlists") {
-    tabPlaylists?.classList.add("active");
-    tabPlaylists?.setAttribute("aria-selected", "true");
-    tabAlbums?.classList.remove("active");
-    tabAlbums?.setAttribute("aria-selected", "false");
-    tabMisc?.classList.remove("active");
-    tabMisc?.setAttribute("aria-selected", "false");
-    if (searchWrap) searchWrap.hidden = false;
-    if (miscView) miscView.hidden = true;
+  const hideSearch = tab === "misc" || tab === "recommend";
+  if (searchWrap) searchWrap.hidden = hideSearch;
 
-    if (searchInput && searchInput.value.trim()) {
-      performDrawerSearch(searchInput.value);
-    } else {
-      if (playlistsView) playlistsView.hidden = false;
-      if (albumsView) albumsView.hidden = true;
-      if (searchView) searchView.hidden = true;
-    }
-  } else if (tab === "albums") {
-    tabAlbums?.classList.add("active");
-    tabAlbums?.setAttribute("aria-selected", "true");
-    tabPlaylists?.classList.remove("active");
-    tabPlaylists?.setAttribute("aria-selected", "false");
-    tabMisc?.classList.remove("active");
-    tabMisc?.setAttribute("aria-selected", "false");
-    if (searchWrap) searchWrap.hidden = false;
-    if (miscView) miscView.hidden = true;
-
-    if (searchInput && searchInput.value.trim()) {
-      performDrawerSearch(searchInput.value);
-    } else {
-      if (playlistsView) playlistsView.hidden = true;
-      if (albumsView) albumsView.hidden = false;
-      if (searchView) searchView.hidden = true;
-    }
-    loadCollectedAlbums();
-  } else if (tab === "misc") {
-    tabMisc?.classList.add("active");
-    tabMisc?.setAttribute("aria-selected", "true");
-    tabPlaylists?.classList.remove("active");
-    tabPlaylists?.setAttribute("aria-selected", "false");
-    tabAlbums?.classList.remove("active");
-    tabAlbums?.setAttribute("aria-selected", "false");
-    if (searchWrap) searchWrap.hidden = true;
-
-    if (playlistsView) playlistsView.hidden = true;
-    if (albumsView) albumsView.hidden = true;
+  if (!hideSearch && searchInput && searchInput.value.trim()) {
+    performDrawerSearch(searchInput.value);
+  } else {
+    if (playlistsView) playlistsView.hidden = tab !== "playlists";
+    if (recommendView) recommendView.hidden = tab !== "recommend";
+    if (albumsView) albumsView.hidden = tab !== "albums";
+    if (miscView) miscView.hidden = tab !== "misc";
     if (searchView) searchView.hidden = true;
-    if (miscView) miscView.hidden = false;
+  }
 
+  if (tab === "albums") {
+    loadCollectedAlbums();
+  } else if (tab === "recommend") {
+    initRecommendTabIfNeeded();
+  } else if (tab === "misc") {
     syncMiscViewValues();
   }
 }
 
 if (tabPlaylists) tabPlaylists.onclick = () => switchDrawerTab("playlists");
+if (tabRecommend) tabRecommend.onclick = () => switchDrawerTab("recommend");
 if (tabAlbums) tabAlbums.onclick = () => switchDrawerTab("albums");
 if (tabMisc) tabMisc.onclick = () => switchDrawerTab("misc");
 
@@ -1414,11 +1544,13 @@ function replaceTrackRows(list, songs, indices) {
   const rows = document.createDocumentFragment();
   indices.forEach((index, position) => {
     const song = songs[index];
+    if (!song) return;
     const row = document.createElement("li");
     const button = document.createElement("button");
     button.type = "button";
     button.className = "ncm-track";
     button.dataset.index = index;
+    button.dataset.songId = song.id;
 
     const number = document.createElement("span");
     number.className = "ncm-track-number";
@@ -1440,7 +1572,33 @@ function replaceTrackRows(list, songs, indices) {
     };
     button.title = artist.textContent ? `${song.name} - ${artist.textContent}` : song.name;
     info.append(title, artist);
-    button.append(number, info);
+
+    // 播放队列行内快捷操作（红心喜欢 + 加入歌单）
+    const actions = document.createElement("span");
+    const isLiked = likedSongIds.has(String(song.id));
+    actions.className = `ncm-track-inline-actions${isLiked ? " has-liked" : ""}`;
+
+    const likeBtn = document.createElement("span");
+    likeBtn.className = `ncm-row-action-btn ncm-inline-like${isLiked ? " liked" : ""}`;
+    likeBtn.dataset.likeSongId = String(song.id);
+    likeBtn.title = isLiked ? "取消红心" : "红心喜欢";
+    likeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>';
+    likeBtn.onclick = (e) => {
+      e.stopPropagation();
+      toggleSongLike(song);
+    };
+
+    const addPlBtn = document.createElement("span");
+    addPlBtn.className = "ncm-row-action-btn";
+    addPlBtn.title = "收藏到歌单";
+    addPlBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/></svg>';
+    addPlBtn.onclick = (e) => {
+      e.stopPropagation();
+      openAddToPlaylistModal([song]);
+    };
+
+    actions.append(likeBtn, addPlBtn);
+    button.append(number, info, actions);
     row.append(button);
     rows.append(row);
   });
@@ -1455,7 +1613,22 @@ function renderTracks() {
 function renderQueue() {
   replaceTrackRows(queueList, queueTracks, queueOrder);
   $("ncm-queue-empty").hidden = queueTracks.length > 0;
-  $("ncm-queue-summary").textContent = queueTracks.length ? `${queueName} · ${queueTracks.length} 首` : "";
+  const suffix = playStreamMode === "fm" ? " (含历史 · 自动续播)" : "";
+  $("ncm-queue-summary").textContent = queueTracks.length ? `${queueName} · ${queueTracks.length} 首${suffix}` : "";
+  const badge = $("ncm-queue-mode-badge");
+  if (badge) {
+    if (playStreamMode === "fm") {
+      badge.textContent = "私人漫游";
+      badge.className = "ncm-queue-mode-badge";
+      badge.hidden = false;
+    } else if (playStreamMode === "heartbeat") {
+      badge.textContent = "心动模式";
+      badge.className = "ncm-queue-mode-badge is-heartbeat";
+      badge.hidden = false;
+    } else {
+      badge.hidden = true;
+    }
+  }
   updateActiveTrack();
 }
 
@@ -1471,14 +1644,15 @@ function updateActiveTrack() {
 }
 
 function rebuildQueueOrder(startIndex) {
+  if (playStreamMode === "fm") {
+    // 私人漫游采用线性滚动磁带模式：保留历史单曲 + 自动向后追加新推荐
+    queueOrder = queueTracks.map((_, index) => index);
+    renderQueue();
+    return;
+  }
   queueOrder = queueTracks.map((_, index) => index);
-  if (orderControl.value === "shuffle" && queueOrder.length) {
-    queueOrder = queueOrder.filter(index => index !== startIndex);
-    for (let position = queueOrder.length - 1; position > 0; position--) {
-      const other = Math.floor(Math.random() * (position + 1));
-      [queueOrder[position], queueOrder[other]] = [queueOrder[other], queueOrder[position]];
-    }
-    if (startIndex >= 0) queueOrder.unshift(startIndex);
+  if (orderControl.value === "shuffle" && queueOrder.length > 1) {
+    queueOrder = buildSmartShuffleOrder(queueTracks, startIndex, shufflePref);
   }
   renderQueue();
 }
@@ -1561,8 +1735,13 @@ if (orderBtn) {
     orderControl.value = nextMode;
     localStorage.setItem("ncm_order", nextMode);
     rebuildQueueOrder(currentIdx);
-  savePlaybackState();
+    savePlaybackState();
     updateOrderButtonUI(nextMode, true);
+  };
+  orderBtn.oncontextmenu = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openShufflePrefModal();
   };
 }
 updateOrderButtonUI(orderControl.value, false);
@@ -2381,6 +2560,15 @@ async function playTrack(idx) {
   const albumTitle = song.al?.name || song.name;
   const coverUrl = song.al?.picUrl ? `${song.al.picUrl}?param=800y800` : "";
   updateFocusCover(song);
+  syncDockLikeButton(song);
+  recordSongPlayCount(song.id);
+  prefetchSongGenre(song.id);
+  if (playStreamMode === "fm" || playStreamMode === "heartbeat") {
+    recordStreamHistory(song, playStreamMode);
+  }
+  if (playStreamMode === "fm" && idx >= queueTracks.length - 2) {
+    fetchMorePersonalFm(false);
+  }
   bridge.updateTrack({ title: song.name, artist, albumTitle, coverUrl });
   extractAndApplyDualAccents(coverUrl);
 
@@ -2437,6 +2625,19 @@ function stepQueue(direction) {
   if (!queueOrder.length) return false;
   const position = queueOrder.indexOf(currentIdx);
   let next = position === -1 && direction < 0 ? queueOrder.length - 1 : position + direction;
+  if (playStreamMode === "fm") {
+    if (next < 0) return false;
+    if (next >= queueOrder.length) {
+      fetchMorePersonalFm(true).then((added) => {
+        if (added > 0 && next < queueTracks.length) {
+          playTrack(next);
+        }
+      });
+      return true;
+    }
+    playTrack(queueOrder[next]);
+    return true;
+  }
   if (next < 0 || next >= queueOrder.length) {
     if (orderControl.value === "sequential") return false;
     next = (next + queueOrder.length) % queueOrder.length;
@@ -4340,6 +4541,972 @@ if (miscCheckUpdateBtn) {
   controls.addEventListener("focusin", showControls);
 })();
 
+// =========================================================================
+// 14. 红心喜欢 (Like / Unlike) 系统
+// =========================================================================
+async function loadUserLikedSongs(uid) {
+  if (!uid) return;
+  try {
+    const res = await api("/likelist", { uid, timestamp: Date.now() });
+    likedSongIds.clear();
+    for (const id of (res.ids || [])) {
+      likedSongIds.add(String(id));
+    }
+    syncAllLikeIconsUI();
+  } catch (err) {
+    console.warn("[NCM] 拉取红心列表失败:", err);
+  }
+}
+
+function syncDockLikeButton(song) {
+  const dockLikeBtn = $("ncm-dock-like-btn");
+  if (!dockLikeBtn) return;
+  if (!song || !song.id) {
+    dockLikeBtn.classList.remove("liked");
+    dockLikeBtn.title = "喜欢歌曲 (红心)";
+    return;
+  }
+  const liked = likedSongIds.has(String(song.id));
+  dockLikeBtn.classList.toggle("liked", liked);
+  dockLikeBtn.title = liked ? "已红心喜欢 (点击取消)" : "喜欢歌曲 (红心)";
+}
+
+function syncAllLikeIconsUI() {
+  const curSong = queueTracks[currentIdx];
+  syncDockLikeButton(curSong);
+  document.querySelectorAll("[data-like-song-id]").forEach((el) => {
+    const sid = el.dataset.likeSongId;
+    const liked = likedSongIds.has(sid);
+    el.classList.toggle("liked", liked);
+    el.title = liked ? "取消红心" : "红心喜欢";
+    const wrap = el.closest(".ncm-track-inline-actions");
+    if (wrap) wrap.classList.toggle("has-liked", liked);
+  });
+}
+
+async function toggleSongLike(song) {
+  if (!song || !song.id) return;
+  if (!cookie) {
+    showPlayerToast("请先扫码登录网易云账号");
+    return;
+  }
+  const sid = String(song.id);
+  const nextLike = !likedSongIds.has(sid);
+
+  // 乐观更新 UI
+  if (nextLike) likedSongIds.add(sid);
+  else likedSongIds.delete(sid);
+  syncAllLikeIconsUI();
+
+  const dockLikeBtn = $("ncm-dock-like-btn");
+  if (dockLikeBtn && queueTracks[currentIdx] && String(queueTracks[currentIdx].id) === sid) {
+    dockLikeBtn.classList.remove("heart-pop");
+    void dockLikeBtn.offsetWidth;
+    dockLikeBtn.classList.add("heart-pop");
+  }
+
+  try {
+    const res = await api("/like", { id: song.id, like: nextLike ? "true" : "false", timestamp: Date.now() });
+    if (res.code !== 200) throw new Error(res.message || "操作失败");
+    showPlayerToast(nextLike ? `已红心喜欢: ${song.name}` : `已取消红心: ${song.name}`);
+    // 失效「我喜欢的音乐」歌单缓存以便下次展开同步
+    if (userPlaylists[0]) playlistTracksCache.delete(userPlaylists[0].id);
+  } catch (err) {
+    // 回滚状态
+    if (nextLike) likedSongIds.delete(sid);
+    else likedSongIds.add(sid);
+    syncAllLikeIconsUI();
+    showPlayerToast("红心操作失败，请检查登录状态");
+  }
+}
+
+const dockLikeBtnEl = $("ncm-dock-like-btn");
+if (dockLikeBtnEl) {
+  dockLikeBtnEl.onclick = (e) => {
+    e.stopPropagation();
+    const cur = queueTracks[currentIdx];
+    if (!cur) {
+      showPlayerToast("当前未在播放歌曲");
+      return;
+    }
+    toggleSongLike(cur);
+  };
+}
+
+// =========================================================================
+// 15. 歌单管理（加入歌单弹窗 + 新建歌单 + 批量多选模式）
+// =========================================================================
+let pendingAddSongs = [];
+const addPlModal = $("ncm-add-playlist-modal");
+const addPlList = $("ncm-add-pl-list");
+const addPlSubtitle = $("ncm-add-pl-subtitle");
+const addPlCloseBtn = $("ncm-add-pl-close");
+const newPlNameInput = $("ncm-new-pl-name");
+const newPlCreateBtn = $("ncm-new-pl-btn");
+
+function openAddToPlaylistModal(songs) {
+  if (!cookie) {
+    showPlayerToast("请先扫码登录网易云账号");
+    return;
+  }
+  const validSongs = (songs || []).filter(s => s && s.id);
+  if (!validSongs.length) {
+    showPlayerToast("请先选择至少一首歌曲");
+    return;
+  }
+  pendingAddSongs = validSongs;
+  if (addPlSubtitle) {
+    addPlSubtitle.textContent = validSongs.length === 1
+      ? `将《${validSongs[0].name}》收藏到歌单`
+      : `将已选的 ${validSongs.length} 首歌曲批量加入歌单`;
+  }
+  if (newPlNameInput) newPlNameInput.value = "";
+  renderTargetPlaylists();
+  if (addPlModal && !addPlModal.open) addPlModal.showModal();
+}
+
+function renderTargetPlaylists() {
+  if (!addPlList) return;
+  // 仅显示用户自己创建的歌单（网易云仅允许往自建歌单加歌）
+  const ownPlaylists = userPlaylists.filter(pl => !currentUserId || String(pl.userId) === String(currentUserId));
+  if (!ownPlaylists.length) {
+    addPlList.innerHTML = '<li class="ncm-drawer-loading">未找到自建歌单，可在上方新建</li>';
+    return;
+  }
+  addPlList.innerHTML = "";
+  ownPlaylists.forEach((pl) => {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ncm-add-pl-item";
+    const coverSrc = pl.coverImgUrl ? `${pl.coverImgUrl}?param=80y80` : "";
+    btn.innerHTML = `
+      <img src="${coverSrc}" alt="" loading="lazy" />
+      <div class="ncm-add-pl-meta">
+        <strong></strong>
+        <span>${pl.trackCount || 0} 首</span>
+      </div>
+    `;
+    btn.querySelector("strong").textContent = pl.name;
+    btn.onclick = () => addPendingSongsToPlaylist(pl);
+    li.appendChild(btn);
+    addPlList.appendChild(li);
+  });
+}
+
+async function addPendingSongsToPlaylist(pl) {
+  if (!pl || !pendingAddSongs.length) return;
+  const ids = pendingAddSongs.map(s => s.id).join(",");
+  try {
+    showPlayerToast(`正在加入《${pl.name}》...`);
+    const res = await api("/playlist/tracks", { op: "add", pid: pl.id, tracks: ids, timestamp: Date.now() });
+    const status = res.body?.status ?? res.status ?? res.code;
+    if (status === 200 || res.code === 200) {
+      playlistTracksCache.delete(pl.id);
+      pl.trackCount = (Number(pl.trackCount) || 0) + pendingAddSongs.length;
+      renderPlaylistAccordion();
+      if (addPlModal?.open) addPlModal.close();
+      exitBatchMode();
+      showPlayerToast(`已成功加入 ${pendingAddSongs.length} 首歌曲到《${pl.name}》`);
+    } else {
+      throw new Error(res.body?.message || res.message || "加入失败");
+    }
+  } catch (err) {
+    console.error("[NCM] 加入歌单失败:", err);
+    showPlayerToast(`加入歌单失败: ${err.message || "可能已存在或无权限"}`);
+  }
+}
+
+if (addPlCloseBtn) {
+  addPlCloseBtn.onclick = () => addPlModal?.close();
+}
+if (addPlModal) {
+  addPlModal.addEventListener("click", (e) => {
+    if (e.target === addPlModal) addPlModal.close();
+  });
+}
+if (newPlCreateBtn) {
+  newPlCreateBtn.onclick = async () => {
+    const name = (newPlNameInput?.value || "").trim();
+    if (!name) {
+      showPlayerToast("请输入新歌单名称");
+      return;
+    }
+    newPlCreateBtn.disabled = true;
+    try {
+      const res = await api("/playlist/create", { name, timestamp: Date.now() });
+      const created = res.playlist;
+      if (!created || !created.id) throw new Error(res.message || "创建歌单失败");
+      userPlaylists.splice(1, 0, created);
+      renderPlaylistAccordion();
+      await addPendingSongsToPlaylist(created);
+    } catch (err) {
+      showPlayerToast(`创建歌单失败: ${err.message || err}`);
+    } finally {
+      newPlCreateBtn.disabled = false;
+    }
+  };
+}
+
+// 批量多选模式控制
+const batchBar = $("ncm-batch-bar");
+const batchCountEl = $("ncm-batch-count");
+const batchSelectAllBtn = $("ncm-batch-select-all");
+const batchAddBtn = $("ncm-batch-add-playlist");
+const batchCancelBtn = $("ncm-batch-cancel");
+
+function updateBatchBarUI() {
+  if (batchCountEl) batchCountEl.textContent = `已选 ${batchState.selectedIds.size} 首`;
+  if (batchSelectAllBtn) {
+    const allSelected = batchState.songs.length > 0 && batchState.selectedIds.size >= batchState.songs.length;
+    batchSelectAllBtn.textContent = allSelected ? "取消全选" : "全选";
+  }
+}
+
+function enterBatchMode(containerEl, songs) {
+  exitBatchMode();
+  if (!containerEl || !songs?.length) return;
+  batchState.active = true;
+  batchState.containerEl = containerEl;
+  batchState.songs = songs;
+  batchState.selectedIds.clear();
+  containerEl.classList.add("is-batch-mode");
+  if (batchBar) batchBar.hidden = false;
+  updateBatchBarUI();
+  showPlayerToast("已进入批量选择模式，点击曲目勾选");
+}
+
+function exitBatchMode() {
+  if (batchState.containerEl) {
+    batchState.containerEl.classList.remove("is-batch-mode");
+    batchState.containerEl.querySelectorAll(".ncm-track.batch-selected").forEach((el) => {
+      el.classList.remove("batch-selected");
+    });
+  }
+  batchState.active = false;
+  batchState.containerEl = null;
+  batchState.songs = [];
+  batchState.selectedIds.clear();
+  if (batchBar) batchBar.hidden = true;
+}
+
+function toggleBatchSelection(songId, btnEl) {
+  const sid = String(songId);
+  if (batchState.selectedIds.has(sid)) {
+    batchState.selectedIds.delete(sid);
+    btnEl?.classList.remove("batch-selected");
+  } else {
+    batchState.selectedIds.add(sid);
+    btnEl?.classList.add("batch-selected");
+  }
+  updateBatchBarUI();
+}
+
+if (batchSelectAllBtn) {
+  batchSelectAllBtn.onclick = () => {
+    if (!batchState.active || !batchState.containerEl) return;
+    const allSelected = batchState.selectedIds.size >= batchState.songs.length;
+    batchState.selectedIds.clear();
+    if (!allSelected) {
+      batchState.songs.forEach(s => s?.id && batchState.selectedIds.add(String(s.id)));
+    }
+    batchState.containerEl.querySelectorAll(".ncm-track[data-song-id]").forEach((btn) => {
+      btn.classList.toggle("batch-selected", batchState.selectedIds.has(btn.dataset.songId));
+    });
+    updateBatchBarUI();
+  };
+}
+if (batchAddBtn) {
+  batchAddBtn.onclick = () => {
+    if (!batchState.selectedIds.size) {
+      showPlayerToast("请先勾选至少一首歌曲");
+      return;
+    }
+    const chosen = batchState.songs.filter(s => s?.id && batchState.selectedIds.has(String(s.id)));
+    openAddToPlaylistModal(chosen);
+  };
+}
+if (batchCancelBtn) {
+  batchCancelBtn.onclick = exitBatchMode;
+}
+
+// =========================================================================
+// 16. 增强型智能随机播放引擎 + 2D XY 偏好坐标矩阵
+// =========================================================================
+async function loadUserPlayCounts(uid) {
+  if (!uid) return;
+  try {
+    const [allRes, weekRes] = await Promise.allSettled([
+      api("/user/record", { uid, type: 0 }),
+      api("/user/record", { uid, type: 1 }),
+    ]);
+    const applyRecords = (list, weight) => {
+      for (const item of (list || [])) {
+        const sid = item?.song?.id ? String(item.song.id) : null;
+        if (!sid) continue;
+        const cnt = Number(item.playCount || item.score || 1) * weight;
+        userPlayCountMap.set(sid, Math.max(userPlayCountMap.get(sid) || 0, cnt));
+      }
+    };
+    if (allRes.status === "fulfilled") applyRecords(allRes.value?.allData, 1);
+    if (weekRes.status === "fulfilled") applyRecords(weekRes.value?.weekData, 1.2);
+  } catch (err) {
+    console.warn("[NCM] 获取个人听歌频次失败:", err);
+  }
+}
+
+function recordSongPlayCount(songId) {
+  if (!songId) return;
+  const sid = String(songId);
+  const next = (userPlayCountMap.get(sid) || 0) + 1;
+  userPlayCountMap.set(sid, next);
+  try {
+    const obj = JSON.parse(localStorage.getItem("ncm_local_play_counts") || "{}");
+    obj[sid] = (Number(obj[sid]) || 0) + 1;
+    localStorage.setItem("ncm_local_play_counts", JSON.stringify(obj));
+  } catch (e) {}
+}
+
+const genrePendingSet = new Set();
+async function prefetchSongGenre(songId) {
+  if (!songId) return;
+  const sid = String(songId);
+  if (songGenreCache.has(sid) || genrePendingSet.has(sid)) return;
+  genrePendingSet.add(sid);
+  try {
+    const res = await api("/song/wiki/summary", { id: songId });
+    const blocks = res.data?.blocks || [];
+    for (const blk of blocks) {
+      const creatives = blk.creatives || [];
+      for (const cr of creatives) {
+        const title = cr.uiElement?.mainTitle?.title || "";
+        if (title.includes("曲风") || cr.creativeType === "songTag") {
+          const tags = (cr.resources || []).map(r => r.uiElement?.mainTitle?.title).filter(Boolean);
+          if (tags.length) {
+            const genre = tags[0];
+            songGenreCache.set(sid, genre);
+            try {
+              const obj = JSON.parse(localStorage.getItem("ncm_song_genre_cache") || "{}");
+              obj[sid] = genre;
+              localStorage.setItem("ncm_song_genre_cache", JSON.stringify(obj));
+            } catch (e) {}
+            return;
+          }
+        }
+      }
+    }
+  } catch (e) {
+  } finally {
+    genrePendingSet.delete(sid);
+  }
+}
+
+function computeSongSimilarity(a, b) {
+  if (!a || !b) return 0;
+  let sim = 0;
+  const gA = songGenreCache.get(String(a.id));
+  const gB = songGenreCache.get(String(b.id));
+  if (gA && gB && gA === gB) sim += 0.55;
+
+  const arA = new Set((a.ar || []).map(x => x.id).filter(Boolean));
+  const arB = (b.ar || []).map(x => x.id).filter(Boolean);
+  if (arB.some(id => arA.has(id))) sim += 0.45;
+
+  if (a.al?.id && b.al?.id && a.al.id === b.al.id) sim += 0.25;
+
+  const popDiff = Math.abs((Number(a.pop) || 50) - (Number(b.pop) || 50));
+  if (popDiff < 15) sim += 0.15;
+  else if (popDiff > 45) sim -= 0.1;
+
+  return Math.max(0, Math.min(1, sim));
+}
+
+function buildSmartShuffleOrder(songs, startIndex, pref = { freq: 0, style: 0 }) {
+  const n = songs.length;
+  if (n <= 1) return songs.map((_, i) => i);
+
+  const freqBias = Math.max(-1, Math.min(1, Number(pref.freq) || 0)); // -1 极少听, +1 最常听
+  const styleBias = Math.max(-1, Math.min(1, Number(pref.style) || 0)); // -1 风格相似, +1 风格跳跃
+
+  // 归一化列表内播放次数
+  let maxPlay = 1;
+  const plays = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const cnt = userPlayCountMap.get(String(songs[i]?.id)) || 0;
+    plays[i] = cnt;
+    if (cnt > maxPlay) maxPlay = cnt;
+  }
+
+  const remaining = [];
+  for (let i = 0; i < n; i++) {
+    if (i !== startIndex) remaining.push(i);
+  }
+
+  const result = [];
+  if (startIndex >= 0 && startIndex < n) {
+    result.push(startIndex);
+  } else {
+    const firstPos = Math.floor(Math.random() * remaining.length);
+    result.push(remaining.splice(firstPos, 1)[0]);
+  }
+
+  const recentArtists = [];
+  const recentAlbums = [];
+  const pushRecent = (song) => {
+    const aId = song?.ar?.[0]?.id;
+    const alId = song?.al?.id;
+    if (aId) { recentArtists.push(aId); if (recentArtists.length > 3) recentArtists.shift(); }
+    if (alId) { recentAlbums.push(alId); if (recentAlbums.length > 2) recentAlbums.shift(); }
+  };
+  pushRecent(songs[result[0]]);
+
+  // 迭代加权采样：对于超大歌单，每步最多抽样 48 个候选保证毫秒级响应
+  while (remaining.length > 0) {
+    const prevSong = songs[result[result.length - 1]];
+    const sampleSize = Math.min(remaining.length, 48);
+    const samplePositions = [];
+    if (sampleSize === remaining.length) {
+      for (let i = 0; i < remaining.length; i++) samplePositions.push(i);
+    } else {
+      const picked = new Set();
+      while (picked.size < sampleSize) {
+        picked.add(Math.floor(Math.random() * remaining.length));
+      }
+      picked.forEach(p => samplePositions.push(p));
+    }
+
+    let totalWeight = 0;
+    const weights = new Float64Array(samplePositions.length);
+    for (let k = 0; k < samplePositions.length; k++) {
+      const idx = remaining[samplePositions[k]];
+      const cand = songs[idx];
+      let w = 1.0;
+
+      // 1. 默认增强：防同歌手/同专辑连续扎堆（当偏向风格相似时放宽该惩罚）
+      const antiClumpStrength = styleBias < -0.35 ? 0.65 : 1.0;
+      if (cand?.ar?.[0]?.id && recentArtists.includes(cand.ar[0].id)) {
+        w *= (1 - 0.82 * antiClumpStrength);
+      }
+      if (cand?.al?.id && recentAlbums.includes(cand.al.id)) {
+        w *= (1 - 0.65 * antiClumpStrength);
+      }
+
+      // 2. X 轴：极少听 (-1) ↔ 最常听 (+1)
+      if (Math.abs(freqBias) > 0.06) {
+        const freqNorm = Math.log1p(plays[idx]) / Math.log1p(maxPlay);
+        if (freqBias > 0) {
+          w *= Math.pow(0.15 + freqNorm, freqBias * 2.5);
+        } else {
+          w *= Math.pow(1.15 - freqNorm, -freqBias * 2.5);
+        }
+      }
+
+      // 3. Y 轴：风格相似 (-1) ↔ 风格跳跃 (+1)
+      if (Math.abs(styleBias) > 0.06) {
+        const sim = computeSongSimilarity(prevSong, cand);
+        if (styleBias < 0) {
+          w *= Math.pow(0.18 + sim, -styleBias * 2.6);
+        } else {
+          w *= Math.pow(1.18 - sim, styleBias * 2.6);
+        }
+      }
+
+      w = Math.max(0.01, w);
+      weights[k] = w;
+      totalWeight += w;
+    }
+
+    let r = Math.random() * totalWeight;
+    let chosenK = samplePositions.length - 1;
+    for (let k = 0; k < weights.length; k++) {
+      r -= weights[k];
+      if (r <= 0) {
+        chosenK = k;
+        break;
+      }
+    }
+
+    const chosenPos = samplePositions[chosenK];
+    const chosenIdx = remaining.splice(chosenPos, 1)[0];
+    result.push(chosenIdx);
+    pushRecent(songs[chosenIdx]);
+  }
+
+  return result;
+}
+
+function getShufflePrefLabel(pref) {
+  const parts = [];
+  if (pref.freq > 0.2) parts.push("偏向最常听");
+  else if (pref.freq < -0.2) parts.push("偏向极少听");
+  if (pref.style > 0.2) parts.push("风格跳跃");
+  else if (pref.style < -0.2) parts.push("风格相似");
+  return parts.length ? parts.join(" · ") : "均衡随机（防同歌手连播）";
+}
+
+function syncShufflePrefDesc() {
+  const desc = $("ncm-misc-shuffle-pref-desc");
+  if (desc) desc.textContent = `当前：${getShufflePrefLabel(shufflePref)}`;
+}
+syncShufflePrefDesc();
+
+// 2D XY 坐标面板弹窗交互
+const shuffleModal = $("ncm-shuffle-pref-modal");
+const shuffleGrid = $("ncm-shuffle-grid");
+const shufflePuck = $("ncm-shuffle-puck");
+const shuffleLiveLabel = $("ncm-shuffle-live-label");
+const shuffleCancelBtn = $("ncm-shuffle-cancel");
+const shuffleResetBtn = $("ncm-shuffle-reset");
+const shuffleConfirmBtn = $("ncm-shuffle-confirm");
+let draftShufflePref = { freq: 0, style: 0 };
+
+function updateShufflePuckVisual(pref) {
+  if (!shufflePuck) return;
+  const xPct = ((pref.freq + 1) / 2) * 100;
+  const yPct = ((1 - pref.style) / 2) * 100; // style +1 在顶部(0%), -1 在底部(100%)
+  shufflePuck.style.left = `${xPct}%`;
+  shufflePuck.style.top = `${yPct}%`;
+  if (shuffleLiveLabel) shuffleLiveLabel.textContent = getShufflePrefLabel(pref);
+}
+
+function openShufflePrefModal() {
+  draftShufflePref = { ...shufflePref };
+  updateShufflePuckVisual(draftShufflePref);
+  if (shuffleModal && !shuffleModal.open) shuffleModal.showModal();
+}
+
+if (shuffleGrid && shufflePuck) {
+  let dragging = false;
+  const updateFromPointer = (clientX, clientY) => {
+    const rect = shuffleGrid.getBoundingClientRect();
+    const nx = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const ny = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    draftShufflePref.freq = Math.round((nx * 2 - 1) * 100) / 100;
+    draftShufflePref.style = Math.round((1 - ny * 2) * 100) / 100;
+    // 中心磁吸
+    if (Math.hypot(draftShufflePref.freq, draftShufflePref.style) < 0.08) {
+      draftShufflePref.freq = 0;
+      draftShufflePref.style = 0;
+    }
+    updateShufflePuckVisual(draftShufflePref);
+  };
+
+  shuffleGrid.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    shufflePuck.classList.add("dragging");
+    shuffleGrid.setPointerCapture?.(e.pointerId);
+    updateFromPointer(e.clientX, e.clientY);
+  });
+  shuffleGrid.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    updateFromPointer(e.clientX, e.clientY);
+  });
+  const endDrag = () => {
+    dragging = false;
+    shufflePuck.classList.remove("dragging");
+  };
+  shuffleGrid.addEventListener("pointerup", endDrag);
+  shuffleGrid.addEventListener("pointercancel", endDrag);
+}
+
+if (shuffleCancelBtn) shuffleCancelBtn.onclick = () => shuffleModal?.close();
+if (shuffleResetBtn) {
+  shuffleResetBtn.onclick = () => {
+    draftShufflePref = { freq: 0, style: 0 };
+    updateShufflePuckVisual(draftShufflePref);
+  };
+}
+if (shuffleConfirmBtn) {
+  shuffleConfirmBtn.onclick = () => {
+    shufflePref = { ...draftShufflePref };
+    localStorage.setItem("ncm_shuffle_pref", JSON.stringify(shufflePref));
+    syncShufflePrefDesc();
+    if (orderControl.value !== "shuffle") {
+      orderControl.value = "shuffle";
+      localStorage.setItem("ncm_order", "shuffle");
+      updateOrderButtonUI("shuffle", false);
+    }
+    if (playStreamMode !== "fm" && queueTracks.length > 1) {
+      rebuildQueueOrder(currentIdx);
+      savePlaybackState();
+    }
+    shuffleModal?.close();
+    showPlayerToast(`随机偏好已更新: ${getShufflePrefLabel(shufflePref)}`);
+  };
+}
+if (shuffleModal) {
+  shuffleModal.addEventListener("click", (e) => {
+    if (e.target === shuffleModal) shuffleModal.close();
+  });
+}
+
+const queueShufflePrefBtn = $("ncm-queue-shuffle-pref-btn");
+if (queueShufflePrefBtn) queueShufflePrefBtn.onclick = openShufflePrefModal;
+const miscShufflePrefBtn = $("ncm-misc-shuffle-pref-btn");
+if (miscShufflePrefBtn) miscShufflePrefBtn.onclick = openShufflePrefModal;
+
+// =========================================================================
+// 17. 推荐中心（每日推荐 / 心动模式 / 私人漫游 / 私人雷达）与流式电台管理
+// =========================================================================
+let recommendLoadedOnce = false;
+let currentRecSubTab = "list"; // "list" | "history"
+let currentRecListSongs = [];
+let currentRecListTitle = "每日推荐";
+
+function normalizeTrackObject(raw) {
+  if (!raw) return null;
+  const s = raw.songInfo || raw;
+  return {
+    ...s,
+    ar: s.ar || s.artists || [],
+    al: s.al || s.album || {},
+    dt: s.dt || s.duration || 0,
+  };
+}
+
+function setPlayStreamMode(mode) {
+  playStreamMode = mode || "normal";
+  const trashBtn = $("ncm-fm-trash-btn");
+  if (trashBtn) trashBtn.hidden = playStreamMode !== "fm";
+  $("ncm-rec-fm")?.classList.toggle("active-mode", playStreamMode === "fm");
+  $("ncm-rec-heartbeat")?.classList.toggle("active-mode", playStreamMode === "heartbeat");
+}
+
+function recordStreamHistory(song, mode) {
+  if (!song || !song.id) return;
+  const entry = {
+    ...normalizeTrackObject(song),
+    _streamMode: mode,
+    _playedAt: Date.now(),
+  };
+  streamHistory = [entry, ...streamHistory.filter(s => String(s.id) !== String(song.id))].slice(0, 100);
+  try {
+    localStorage.setItem("ncm_stream_history", JSON.stringify(streamHistory));
+  } catch (e) {}
+  updateStreamHistoryBadge();
+  if (currentActiveDrawerTab === "recommend" && currentRecSubTab === "history") {
+    renderStreamHistory();
+  }
+}
+
+function updateStreamHistoryBadge() {
+  const cntEl = $("ncm-stream-history-count");
+  if (cntEl) cntEl.textContent = String(streamHistory.length);
+}
+updateStreamHistoryBadge();
+
+function renderRecTrackList(songs, titleText, isHistory = false) {
+  const listEl = $("ncm-rec-track-list");
+  const subtabList = $("ncm-rec-subtab-list");
+  if (subtabList && !isHistory) subtabList.textContent = titleText || "每日推荐";
+  if (!listEl) return;
+  exitBatchMode();
+  listEl.innerHTML = "";
+
+  if (!songs || !songs.length) {
+    listEl.innerHTML = `<li class="ncm-drawer-loading">${isHistory ? "暂无私人漫游 / 心动模式历史播放记录" : "暂无推荐曲目"}</li>`;
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  songs.forEach((song, idx) => {
+    const row = createTrackRow(song, idx, () => {
+      if (isHistory) {
+        // 点击历史记录中的单曲：加入到当前队列并播放
+        const existIdx = queueTracks.findIndex(s => String(s.id) === String(song.id));
+        if (existIdx >= 0) {
+          playTrack(existIdx);
+        } else {
+          const insertIdx = currentIdx >= 0 ? currentIdx + 1 : 0;
+          queueTracks.splice(insertIdx, 0, song);
+          rebuildQueueOrder(insertIdx);
+          savePlaybackState();
+          playTrack(insertIdx);
+        }
+      } else {
+        setPlayStreamMode("normal");
+        tracks = songs;
+        queueTracks = songs;
+        queueName = titleText;
+        rebuildQueueOrder(idx);
+        savePlaybackState();
+        playTrack(idx);
+      }
+    });
+    frag.appendChild(row);
+  });
+  listEl.appendChild(frag);
+}
+
+function renderStreamHistory() {
+  currentRecSubTab = "history";
+  $("ncm-rec-subtab-list")?.classList.remove("active");
+  $("ncm-rec-subtab-history")?.classList.add("active");
+  renderRecTrackList(streamHistory, "漫游 / 心动历史", true);
+}
+
+async function loadDailyRecommend(autoPlay = false) {
+  if (!cookie) {
+    showPlayerToast("请先扫码登录网易云账号");
+    return;
+  }
+  currentRecSubTab = "list";
+  $("ncm-rec-subtab-list")?.classList.add("active");
+  $("ncm-rec-subtab-history")?.classList.remove("active");
+  const listEl = $("ncm-rec-track-list");
+  if (listEl) listEl.innerHTML = '<li class="ncm-drawer-loading">正在获取每日推荐...</li>';
+  try {
+    const res = await api("/recommend/songs", { timestamp: Date.now() });
+    const raw = res.data?.dailySongs || res.recommend || [];
+    const songs = raw.map(normalizeTrackObject).filter(Boolean);
+    currentRecListSongs = songs;
+    currentRecListTitle = "每日推荐";
+    renderRecTrackList(songs, "每日推荐", false);
+    if (autoPlay && songs.length) {
+      setPlayStreamMode("normal");
+      tracks = songs;
+      queueTracks = songs;
+      queueName = "每日推荐";
+      rebuildQueueOrder(0);
+      savePlaybackState();
+      playTrack(0);
+    }
+  } catch (err) {
+    console.error("[NCM] 每日推荐加载失败:", err);
+    if (listEl) listEl.innerHTML = '<li class="ncm-drawer-loading" style="color:#fda4af">获取每日推荐失败，请检查登录状态</li>';
+  }
+}
+
+async function startHeartbeatMode() {
+  if (!cookie) {
+    showPlayerToast("请先扫码登录网易云账号");
+    return;
+  }
+  const likedPl = userPlaylists[0];
+  if (!likedPl) {
+    showPlayerToast("未找到「我喜欢的音乐」歌单");
+    return;
+  }
+  showPlayerToast("正在启动心动模式...");
+  try {
+    let seedSong = queueTracks[currentIdx];
+    if (!seedSong || !likedSongIds.has(String(seedSong.id))) {
+      const likedSongs = await fetchPlaylistTracks(likedPl.id, Math.min(likedPl.trackCount || 50, 100));
+      if (!likedSongs.length) {
+        showPlayerToast("红心歌单为空，无法开启心动模式");
+        return;
+      }
+      seedSong = likedSongs[Math.floor(Math.random() * likedSongs.length)];
+    }
+    const res = await api("/playmode/intelligence/list", {
+      id: seedSong.id,
+      pid: likedPl.id,
+      sid: seedSong.id,
+      timestamp: Date.now(),
+    });
+    const list = (res.data || []).map(normalizeTrackObject).filter(Boolean);
+    if (!list.length) throw new Error("未获取到心动队列");
+
+    // 将种子歌曲放在首位（避免重复）
+    const dedup = [normalizeTrackObject(seedSong), ...list.filter(s => String(s.id) !== String(seedSong.id))];
+    setPlayStreamMode("heartbeat");
+    tracks = dedup;
+    queueTracks = dedup;
+    queueName = "💓 心动模式";
+    rebuildQueueOrder(0);
+    savePlaybackState();
+    playTrack(0);
+    showPlayerToast(`已开启心动模式 (${dedup.length} 首)`);
+  } catch (err) {
+    console.error("[NCM] 启动心动模式失败:", err);
+    showPlayerToast("开启心动模式失败，请稍后重试");
+  }
+}
+
+async function fetchPersonalFmBatch() {
+  let res;
+  if (currentFmMode.mode && currentFmMode.mode !== "DEFAULT") {
+    const params = { mode: currentFmMode.mode, limit: 3, timestamp: Date.now() };
+    if (currentFmMode.subMode) params.submode = currentFmMode.subMode;
+    res = await api("/personal_fm_mode", params);
+  } else {
+    res = await api("/personal_fm", { timestamp: Date.now() });
+  }
+  return (res.data || []).map(normalizeTrackObject).filter(Boolean);
+}
+
+async function startPersonalFm() {
+  if (!cookie) {
+    showPlayerToast("请先扫码登录网易云账号");
+    return;
+  }
+  showPlayerToast("正在接入私人漫游电台...");
+  try {
+    const batch = await fetchPersonalFmBatch();
+    if (!batch.length) throw new Error("未获取到私人漫游曲目");
+    setPlayStreamMode("fm");
+    tracks = batch;
+    queueTracks = [...batch];
+    queueName = "📻 私人漫游";
+    rebuildQueueOrder(0);
+    savePlaybackState();
+    playTrack(0);
+    // 立即预拉取下一批，保证切歌丝滑零等待
+    fetchMorePersonalFm(false);
+    showPlayerToast("已开启私人漫游（无限续播 · 支持历史回看）");
+  } catch (err) {
+    console.error("[NCM] 启动私人漫游失败:", err);
+    showPlayerToast("开启私人漫游失败，请检查登录状态");
+  }
+}
+
+async function fetchMorePersonalFm(showErr = false) {
+  if (fmFetchingMore || playStreamMode !== "fm") return 0;
+  fmFetchingMore = true;
+  try {
+    const batch = await fetchPersonalFmBatch();
+    const existingIds = new Set(queueTracks.map(s => String(s.id)));
+    const fresh = batch.filter(s => !existingIds.has(String(s.id)));
+    if (fresh.length) {
+      const start = queueTracks.length;
+      queueTracks.push(...fresh);
+      for (let i = start; i < queueTracks.length; i++) {
+        queueOrder.push(i);
+      }
+      if ($("ncm-queue")?.open) renderQueue();
+    }
+    return fresh.length;
+  } catch (err) {
+    if (showErr) showPlayerToast("拉取下一批漫游曲目失败");
+    return 0;
+  } finally {
+    fmFetchingMore = false;
+  }
+}
+
+async function trashCurrentFmSong() {
+  if (playStreamMode !== "fm") return;
+  const cur = queueTracks[currentIdx];
+  if (!cur) return;
+  try {
+    api("/fm_trash", { id: cur.id, timestamp: Date.now() }).catch(() => {});
+    showPlayerToast(`已跳过并减少推荐: ${cur.name}`);
+    const removeIdx = currentIdx;
+    queueTracks.splice(removeIdx, 1);
+    queueOrder = queueTracks.map((_, i) => i);
+    renderQueue();
+    if (removeIdx < queueTracks.length) {
+      playTrack(removeIdx);
+    } else {
+      const added = await fetchMorePersonalFm(true);
+      if (added > 0) playTrack(queueTracks.length - added);
+    }
+  } catch (err) {
+    showPlayerToast("操作失败");
+  }
+}
+
+async function loadPersonalRadar() {
+  if (!cookie) {
+    showPlayerToast("请先扫码登录网易云账号");
+    return;
+  }
+  currentRecSubTab = "list";
+  $("ncm-rec-subtab-list")?.classList.add("active");
+  $("ncm-rec-subtab-history")?.classList.remove("active");
+  const listEl = $("ncm-rec-track-list");
+  if (listEl) listEl.innerHTML = '<li class="ncm-drawer-loading">正在定位你的私人雷达...</li>';
+  try {
+    const res = await api("/recommend/resource", { timestamp: Date.now() });
+    const recs = res.recommend || [];
+    let radar = recs.find(p => (p.name || "").includes("私人雷达"));
+    if (!radar) radar = recs.find(p => (p.name || "").includes("雷达")) || recs[0];
+    if (!radar) {
+      const fb = await api("/personalized", { limit: 10 });
+      radar = (fb.result || []).find(p => (p.name || "").includes("雷达")) || (fb.result || [])[0];
+    }
+    if (!radar) throw new Error("未找到私人雷达歌单");
+
+    const songs = await fetchPlaylistTracks(radar.id, Math.min(radar.trackCount || 60, 100));
+    currentRecListSongs = songs;
+    currentRecListTitle = radar.name || "私人雷达";
+    renderRecTrackList(songs, currentRecListTitle, false);
+    showPlayerToast(`已加载: ${currentRecListTitle} (${songs.length} 首)`);
+  } catch (err) {
+    console.error("[NCM] 私人雷达加载失败:", err);
+    if (listEl) listEl.innerHTML = '<li class="ncm-drawer-loading" style="color:#fda4af">加载私人雷达失败</li>';
+  }
+}
+
+function initRecommendTabIfNeeded() {
+  const dayEl = $("ncm-rec-day-num");
+  if (dayEl) dayEl.textContent = String(new Date().getDate());
+  updateStreamHistoryBadge();
+  if (!recommendLoadedOnce && cookie) {
+    recommendLoadedOnce = true;
+    loadDailyRecommend(false);
+  }
+}
+
+$("ncm-rec-daily")?.addEventListener("click", () => loadDailyRecommend(false));
+$("ncm-rec-heartbeat")?.addEventListener("click", () => startHeartbeatMode());
+$("ncm-rec-fm")?.addEventListener("click", () => startPersonalFm());
+$("ncm-rec-radar")?.addEventListener("click", () => loadPersonalRadar());
+$("ncm-fm-trash-btn")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  trashCurrentFmSong();
+});
+
+$("ncm-rec-subtab-list")?.addEventListener("click", () => {
+  currentRecSubTab = "list";
+  $("ncm-rec-subtab-list")?.classList.add("active");
+  $("ncm-rec-subtab-history")?.classList.remove("active");
+  renderRecTrackList(currentRecListSongs, currentRecListTitle, false);
+});
+$("ncm-rec-subtab-history")?.addEventListener("click", renderStreamHistory);
+
+$("ncm-rec-play-all-btn")?.addEventListener("click", () => {
+  const targetSongs = currentRecSubTab === "history" ? streamHistory : currentRecListSongs;
+  const title = currentRecSubTab === "history" ? "漫游 / 心动历史" : currentRecListTitle;
+  if (!targetSongs.length) {
+    showPlayerToast("当前列表暂无可播放曲目");
+    return;
+  }
+  setPlayStreamMode("normal");
+  tracks = targetSongs;
+  queueTracks = targetSongs;
+  queueName = title;
+  rebuildQueueOrder(0);
+  savePlaybackState();
+  playTrack(0);
+  showPlayerToast(`已开始播放: ${title} (${targetSongs.length} 首)`);
+});
+
+$("ncm-rec-batch-btn")?.addEventListener("click", () => {
+  const targetSongs = currentRecSubTab === "history" ? streamHistory : currentRecListSongs;
+  const listEl = $("ncm-rec-track-list");
+  if (!targetSongs.length || !listEl) {
+    showPlayerToast("当前列表暂无可选择的曲目");
+    return;
+  }
+  enterBatchMode(listEl, targetSongs);
+});
+
+document.querySelectorAll(".ncm-fm-pill").forEach((pill) => {
+  pill.addEventListener("click", () => {
+    document.querySelectorAll(".ncm-fm-pill").forEach(p => p.classList.remove("active"));
+    pill.classList.add("active");
+    currentFmMode = {
+      mode: pill.dataset.fmMode || "DEFAULT",
+      subMode: pill.dataset.fmSub || "",
+    };
+    if (playStreamMode === "fm") {
+      startPersonalFm();
+    } else {
+      showPlayerToast(`已选定漫游模式: ${pill.textContent}，点击「私人漫游」即可开启`);
+    }
+  });
+});
+
 setTimeout(restorePlaybackState, 350);
-console.log("[NCM Player] 网易云播放器初始化完成 (含 AMLL 歌词引擎与 AV3A/AV3V 解码器)");
-console.log("[NCM Player] 快捷键：空格=播放暂停 | Shift+← →=切曲 | ← →=快退快进5s | ↑↓=音量");
+console.log("[NCM Player] 网易云播放器初始化完成 (含 AMLL 歌词引擎、AV3A 解码器与智能随机/推荐中心)");
