@@ -117,6 +117,7 @@ if (fs.existsSync(sevenZipPath)) {
     'netease-player.js',
     'netease-ui.css',
     'style.css',
+    'bundle.js',
     'amll-player.js',
     'audio-stream.js',
     'av3a-decoder.js',
