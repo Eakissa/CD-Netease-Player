@@ -303,61 +303,86 @@ body.controls-autohide #ncm-controls:focus-within {
   width: 18px;
   height: 18px;
 }
-/* 悬停展开式音量胶囊 */
+/* 悬停向上悬浮弹出式音量胶囊（固定占位，绝不左右推挤相邻按钮） */
 .transport-volume-capsule {
   display: flex;
   align-items: center;
+  justify-content: center;
   position: relative;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  padding: 1px 3px 1px 1px;
-  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  width: 34px;
+  height: 34px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  padding: 0;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 .transport-volume-capsule:hover,
 .transport-volume-capsule:focus-within {
   background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 .transport-volume-slider-wrap {
-  width: 0;
-  opacity: 0;
-  overflow: hidden;
-  transition: width 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.22s ease, margin 0.26s ease;
-  margin-left: 0;
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  width: 38px;
+  height: 112px;
+  border-radius: 999px;
+  background: rgba(22, 26, 36, 0.92);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(10px) scale(0.92);
+  transform-origin: bottom center;
+  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 60;
+}
+/* 隐形悬停桥接区：鼠标从喇叭向上滑入音量条期间不断开 hover */
+.transport-volume-slider-wrap::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: -6px;
+  right: -6px;
+  height: 16px;
 }
 .transport-volume-capsule:hover .transport-volume-slider-wrap,
 .transport-volume-capsule:focus-within .transport-volume-slider-wrap {
-  width: 68px;
   opacity: 1;
-  margin-left: 2px;
-  margin-right: 6px;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0) scale(1);
 }
 #ncm-volume {
-  width: 68px;
+  width: 84px;
   appearance: none;
-  height: 14px;
+  height: 16px;
   background: transparent;
   cursor: pointer;
   margin: 0;
   --fill: 70%;
+  transform: rotate(-90deg);
+  flex-shrink: 0;
 }
 #ncm-volume::-webkit-slider-runnable-track {
-  height: 3px;
-  border-radius: 3px;
-  background: linear-gradient(to right, var(--bg-accent-1, #ff4d6d) var(--fill, 70%), rgba(255, 255, 255, 0.25) var(--fill, 70%));
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--bg-accent-1, #ff4d6d) var(--fill, 70%), rgba(255, 255, 255, 0.24) var(--fill, 70%));
 }
 #ncm-volume::-webkit-slider-thumb {
   appearance: none;
-  width: 10px;
-  height: 10px;
-  margin-top: -3.5px;
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
   border-radius: 50%;
   background: #ffffff;
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.45);
 }
 /* ===== 右侧歌单抽屉 ===== */
 #ncm-drawer-backdrop {
@@ -1964,16 +1989,71 @@ body.ncm-drawer-open #ncm-right-glass-strip {
   transform: translateX(-50%);
 }
 
+/* 左侧专辑信息栏：采用严格底部安全界限的 Flex 纵排布局，彻底杜绝与厂牌和底栏重合 */
+#left {
+  display: flex;
+  flex-direction: column;
+  top: var(--pad-top, 8vh) !important;
+  bottom: 150px !important; /* 严密留空给 #footer (bottom: 98px) 与底部胶囊播控栏 */
+  width: 34vw;
+  pointer-events: auto;
+}
+#title, #note {
+  flex-shrink: 0;
+}
+
 #footer {
-  left: 28vw;
+  left: 24.5vw;
   transform: translateX(-50%);
-  bottom: calc(22px + 60px + 20px) !important; /* 102px：彻底避免被底部 60px 悬浮播控胶囊条遮挡，留出充裕呼吸间距 */
+  bottom: 98px !important; /* 稳居底部 60px 播控栏正上方，且与 #left 底部保持安全间距 */
   z-index: 10;
   pointer-events: none;
+  max-width: 34vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #tracklist {
-  max-height: calc(100vh - 102px - 28px - 18vh);
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 3.2vh !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  padding-bottom: 10px;
+}
+#tracklist::-webkit-scrollbar {
+  display: none;
+}
+
+/* 方案 B：长专辑（15 首及以上）自动切换为黑胶/CD 说明书风格双栏排版 */
+#tracklist.tracks-dual-col #tracks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 1.6vw;
+  row-gap: 2px;
+}
+#tracklist.tracks-dual-col #tracks li {
+  font-size: calc(1.85vh * var(--list-scale, 1) * var(--fit, 1));
+  line-height: 1.55;
+  letter-spacing: calc(0.05em + var(--list-ls, 0em) + var(--font-ls, 0em));
+}
+#tracklist.tracks-dual-col #tracks .num {
+  width: calc(2.1vw * var(--list-scale, 1));
+  font-size: calc(1.45vh * var(--list-scale, 1) * var(--fit, 1));
+}
+#tracklist.tracks-dual-col #tracks li .name {
+  max-width: calc(100% - 2.1vw * var(--list-scale, 1));
+}
+
+/* 当曲目数超过一屏容量（如 >26 首）时启用柔和上下渐隐滚动视口 */
+#tracklist.tracks-scrollable {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 4%, #000 90%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 4%, #000 90%, transparent 100%);
+  padding-top: 6px;
+  padding-bottom: 18px;
 }
 
 /* 频谱动效：置于 CD 盒与歌词区域交界处 */

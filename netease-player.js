@@ -5612,5 +5612,34 @@ document.querySelectorAll(".ncm-fm-pill").forEach((pill) => {
   });
 });
 
+// =========================================================================
+// 18. 左侧专辑曲目列表方案 B 自适应引擎（15+ 首双栏排版 / 超长专辑柔光自动滚动）
+// =========================================================================
+(function initAlbumTracklistAdaptiveLayout() {
+  const tracklistWrap = $("tracklist");
+  const tracksOl = $("tracks");
+  if (!tracklistWrap || !tracksOl) return;
+
+  const updateTracklistLayout = () => {
+    const items = tracksOl.querySelectorAll("li");
+    const count = items.length;
+    tracklistWrap.classList.toggle("tracks-dual-col", count >= 15);
+
+    requestAnimationFrame(() => {
+      const isOverflow = tracklistWrap.scrollHeight > tracklistWrap.clientHeight + 6;
+      tracklistWrap.classList.toggle("tracks-scrollable", isOverflow);
+      const curLi = tracksOl.querySelector("li.current");
+      if (isOverflow && curLi) {
+        curLi.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    });
+  };
+
+  const observer = new MutationObserver(updateTracklistLayout);
+  observer.observe(tracksOl, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+  window.addEventListener("resize", updateTracklistLayout);
+  setTimeout(updateTracklistLayout, 400);
+})();
+
 setTimeout(restorePlaybackState, 350);
 console.log("[NCM Player] 网易云播放器初始化完成 (含 AMLL 歌词引擎、AV3A 解码器与智能随机/推荐中心)");
