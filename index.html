@@ -206,7 +206,7 @@
         <button id="ncm-tab-albums" class="ncm-drawer-tab" role="tab" aria-selected="false">收藏专辑</button>
         <button id="ncm-tab-misc" class="ncm-drawer-tab" role="tab" aria-selected="false">杂项<span id="ncm-update-dot" class="update-dot" hidden></span></button>
       </div>
-      <button id="ncm-drawer-close" type="button" title="关闭歌单 (Esc)" aria-label="关闭歌单">✕</button>
+      <button id="ncm-drawer-close" type="button" title="关闭歌单 (Esc)" aria-label="关闭歌单" hidden>✕</button>
     </div>
 
     <!-- 歌单内曲目即时搜索栏 -->
@@ -833,14 +833,11 @@
     </div>
   </dialog>
 
-  <!-- 收藏歌曲到目标歌单弹窗（支持单曲与批量添加 + 新建歌单） -->
+  <!-- 收藏歌曲到目标歌单浮层（跟随唤起位置、点击空白自动关闭） -->
   <dialog id="ncm-add-playlist-modal" class="ncm-add-playlist-modal" aria-labelledby="ncm-add-pl-title">
-    <header class="settings-head">
-      <div>
-        <h2 id="ncm-add-pl-title">收藏到歌单</h2>
-        <p id="ncm-add-pl-subtitle">选择要加入的目标歌单</p>
-      </div>
-      <button type="button" id="ncm-add-pl-close" aria-label="关闭">×</button>
+    <header class="ncm-add-pl-head">
+      <h2 id="ncm-add-pl-title">收藏到歌单</h2>
+      <p id="ncm-add-pl-subtitle">选择要加入的目标歌单</p>
     </header>
     <div class="ncm-add-pl-body">
       <div class="ncm-add-pl-create-row">

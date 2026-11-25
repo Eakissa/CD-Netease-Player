@@ -313,11 +313,12 @@ if (ctxLikeBtn) {
 }
 
 if (ctxAddPlaylistBtn) {
-  ctxAddPlaylistBtn.onclick = () => {
+  ctxAddPlaylistBtn.onclick = (e) => {
     if (!contextMenuTargetSong) return;
     const song = contextMenuTargetSong;
+    const pt = { x: e.clientX, y: e.clientY };
     hideContextMenu();
-    openAddToPlaylistModal([song]);
+    openAddToPlaylistModal([song], pt);
   };
 }
 
@@ -403,7 +404,7 @@ function createTrackRow(song, position, onPlayClick) {
   addPlBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/></svg>';
   addPlBtn.onclick = (e) => {
     e.stopPropagation();
-    openAddToPlaylistModal([song]);
+    openAddToPlaylistModal([song], addPlBtn);
   };
 
   actions.append(likeBtn, addPlBtn);
@@ -1741,7 +1742,7 @@ if (orderBtn) {
   orderBtn.oncontextmenu = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    openShufflePrefModal();
+    openShufflePrefModal(orderBtn, true);
   };
 }
 updateOrderButtonUI(orderControl.value, false);
@@ -4634,17 +4635,90 @@ if (dockLikeBtnEl) {
 }
 
 // =========================================================================
-// 15. 歌单管理（加入歌单弹窗 + 新建歌单 + 批量多选模式）
+// 15. 歌单管理（锚定浮层弹窗 + 新建歌单 + 批量多选模式）
 // =========================================================================
+function closeAnimatedDialog(dialogEl) {
+  if (!dialogEl || !dialogEl.open || dialogEl.classList.contains("is-closing")) return;
+  dialogEl.classList.add("is-closing");
+  setTimeout(() => {
+    dialogEl.classList.remove("is-closing");
+    if (dialogEl.open) dialogEl.close();
+  }, 160);
+}
+
+function positionAnchoredPopover(dialogEl, anchor, preferAbove = false) {
+  if (!dialogEl) return;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const pad = 12;
+  const gap = 10;
+
+  let ax = vw / 2;
+  let ayTop = vh / 2;
+  let ayBottom = vh / 2;
+
+  if (anchor && typeof anchor.getBoundingClientRect === "function") {
+    const r = anchor.getBoundingClientRect();
+    if (r.width > 0 || r.height > 0) {
+      ax = r.left + r.width / 2;
+      ayTop = r.top;
+      ayBottom = r.bottom;
+    }
+  } else if (anchor && typeof anchor.x === "number" && typeof anchor.y === "number") {
+    ax = anchor.x;
+    ayTop = anchor.y;
+    ayBottom = anchor.y;
+  }
+
+  // 先打开以获取真实渲染尺寸
+  dialogEl.classList.remove("is-closing");
+  dialogEl.style.left = "-9999px";
+  dialogEl.style.top = "-9999px";
+  if (!dialogEl.open) dialogEl.showModal();
+
+  const rect = dialogEl.getBoundingClientRect();
+  const w = rect.width || 360;
+  const h = rect.height || 320;
+
+  let left = ax - w / 2;
+  left = Math.max(pad, Math.min(vw - w - pad, left));
+
+  const spaceAbove = ayTop - pad - gap;
+  const spaceBelow = vh - ayBottom - pad - gap;
+
+  let top;
+  let placement;
+  if (preferAbove) {
+    if (spaceAbove >= h || spaceAbove >= spaceBelow) {
+      top = Math.max(pad, ayTop - h - gap);
+      placement = "above";
+    } else {
+      top = Math.min(vh - h - pad, ayBottom + gap);
+      placement = "below";
+    }
+  } else {
+    if (spaceBelow >= h || spaceBelow >= spaceAbove) {
+      top = Math.min(vh - h - pad, ayBottom + gap);
+      placement = "below";
+    } else {
+      top = Math.max(pad, ayTop - h - gap);
+      placement = "above";
+    }
+  }
+
+  dialogEl.dataset.placement = placement;
+  dialogEl.style.left = `${Math.round(left)}px`;
+  dialogEl.style.top = `${Math.round(top)}px`;
+}
+
 let pendingAddSongs = [];
 const addPlModal = $("ncm-add-playlist-modal");
 const addPlList = $("ncm-add-pl-list");
 const addPlSubtitle = $("ncm-add-pl-subtitle");
-const addPlCloseBtn = $("ncm-add-pl-close");
 const newPlNameInput = $("ncm-new-pl-name");
 const newPlCreateBtn = $("ncm-new-pl-btn");
 
-function openAddToPlaylistModal(songs) {
+function openAddToPlaylistModal(songs, anchor = null, preferAbove = false) {
   if (!cookie) {
     showPlayerToast("请先扫码登录网易云账号");
     return;
@@ -4662,7 +4736,7 @@ function openAddToPlaylistModal(songs) {
   }
   if (newPlNameInput) newPlNameInput.value = "";
   renderTargetPlaylists();
-  if (addPlModal && !addPlModal.open) addPlModal.showModal();
+  positionAnchoredPopover(addPlModal, anchor, preferAbove);
 }
 
 function renderTargetPlaylists() {
@@ -4705,7 +4779,7 @@ async function addPendingSongsToPlaylist(pl) {
       playlistTracksCache.delete(pl.id);
       pl.trackCount = (Number(pl.trackCount) || 0) + pendingAddSongs.length;
       renderPlaylistAccordion();
-      if (addPlModal?.open) addPlModal.close();
+      closeAnimatedDialog(addPlModal);
       exitBatchMode();
       showPlayerToast(`已成功加入 ${pendingAddSongs.length} 首歌曲到《${pl.name}》`);
     } else {
@@ -4717,12 +4791,13 @@ async function addPendingSongsToPlaylist(pl) {
   }
 }
 
-if (addPlCloseBtn) {
-  addPlCloseBtn.onclick = () => addPlModal?.close();
-}
 if (addPlModal) {
   addPlModal.addEventListener("click", (e) => {
-    if (e.target === addPlModal) addPlModal.close();
+    if (e.target === addPlModal) closeAnimatedDialog(addPlModal);
+  });
+  addPlModal.addEventListener("cancel", (e) => {
+    e.preventDefault();
+    closeAnimatedDialog(addPlModal);
   });
 }
 if (newPlCreateBtn) {
@@ -4823,7 +4898,7 @@ if (batchAddBtn) {
       return;
     }
     const chosen = batchState.songs.filter(s => s?.id && batchState.selectedIds.has(String(s.id)));
-    openAddToPlaylistModal(chosen);
+    openAddToPlaylistModal(chosen, batchAddBtn, true);
   };
 }
 if (batchCancelBtn) {
@@ -5069,10 +5144,10 @@ function updateShufflePuckVisual(pref) {
   if (shuffleLiveLabel) shuffleLiveLabel.textContent = getShufflePrefLabel(pref);
 }
 
-function openShufflePrefModal() {
+function openShufflePrefModal(anchor = null, preferAbove = true) {
   draftShufflePref = { ...shufflePref };
   updateShufflePuckVisual(draftShufflePref);
-  if (shuffleModal && !shuffleModal.open) shuffleModal.showModal();
+  positionAnchoredPopover(shuffleModal, anchor || orderBtn, preferAbove);
 }
 
 if (shuffleGrid && shufflePuck) {
@@ -5109,7 +5184,7 @@ if (shuffleGrid && shufflePuck) {
   shuffleGrid.addEventListener("pointercancel", endDrag);
 }
 
-if (shuffleCancelBtn) shuffleCancelBtn.onclick = () => shuffleModal?.close();
+if (shuffleCancelBtn) shuffleCancelBtn.onclick = () => closeAnimatedDialog(shuffleModal);
 if (shuffleResetBtn) {
   shuffleResetBtn.onclick = () => {
     draftShufflePref = { freq: 0, style: 0 };
@@ -5130,20 +5205,24 @@ if (shuffleConfirmBtn) {
       rebuildQueueOrder(currentIdx);
       savePlaybackState();
     }
-    shuffleModal?.close();
+    closeAnimatedDialog(shuffleModal);
     showPlayerToast(`随机偏好已更新: ${getShufflePrefLabel(shufflePref)}`);
   };
 }
 if (shuffleModal) {
   shuffleModal.addEventListener("click", (e) => {
-    if (e.target === shuffleModal) shuffleModal.close();
+    if (e.target === shuffleModal) closeAnimatedDialog(shuffleModal);
+  });
+  shuffleModal.addEventListener("cancel", (e) => {
+    e.preventDefault();
+    closeAnimatedDialog(shuffleModal);
   });
 }
 
 const queueShufflePrefBtn = $("ncm-queue-shuffle-pref-btn");
-if (queueShufflePrefBtn) queueShufflePrefBtn.onclick = openShufflePrefModal;
+if (queueShufflePrefBtn) queueShufflePrefBtn.onclick = () => openShufflePrefModal(queueShufflePrefBtn, false);
 const miscShufflePrefBtn = $("ncm-misc-shuffle-pref-btn");
-if (miscShufflePrefBtn) miscShufflePrefBtn.onclick = openShufflePrefModal;
+if (miscShufflePrefBtn) miscShufflePrefBtn.onclick = () => openShufflePrefModal(miscShufflePrefBtn, true);
 
 // =========================================================================
 // 17. 推荐中心（每日推荐 / 心动模式 / 私人漫游 / 私人雷达）与流式电台管理
